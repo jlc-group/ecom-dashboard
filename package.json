@@ -1,0 +1,20 @@
+{
+  "name": "ecom-dashboard",
+  "version": "1.0.0",
+  "description": "ECOM Dashboard — Express + PostgreSQL backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:init": "psql $DATABASE_URL -f schema.sql"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
