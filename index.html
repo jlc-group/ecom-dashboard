@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECOM TEAM Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --border:#2e3350;
+  --accent:#6c63ff; --green:#00d4aa; --red:#ff6b6b; --yellow:#ffd166;
+  --text:#e8eaf6; --muted:#8892b0;
+  --tt:#ee1d52; --sp:#f57b24; --lz:#7b6cf4;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;font-size:13px;}
+
+/* HEADER */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--green));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo h1{font-size:16px;font-weight:700;}
+.logo p{font-size:11px;color:var(--muted);}
+.header-actions{display:flex;gap:8px;align-items:center;}
+select,button{font-family:inherit;}
+.sel{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;outline:none;}
+.btn{border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-success{background:var(--green);color:#000;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}
+.btn-sm{padding:4px 10px;font-size:11px;}
+
+/* TABS */
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{padding:11px 18px;font-size:12px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-tt.active{color:var(--tt);border-bottom-color:var(--tt);}
+.tab-sp.active{color:var(--sp);border-bottom-color:var(--sp);}
+.tab-lz.active{color:var(--lz);border-bottom-color:var(--lz);}
+
+/* MAIN */
+.main{padding:16px 20px;}
+.page{display:none;}.page.active{display:block;}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;border-top:3px solid var(--c,var(--accent));}
+.kpi-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.kpi-val{font-size:22px;font-weight:700;color:var(--c,var(--text));}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+@media(max-width:900px){.g2,.g3{grid-template-columns:1fr;}}
+
+/* CARD */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
+.card-title{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+
+/* ============================
+   SPREADSHEET INPUT GRID
+   ============================ */
+.sheet-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);}
+.sheet-table{border-collapse:collapse;width:100%;min-width:max-content;}
+.sheet-table th{
+  background:#12152a;color:var(--muted);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;padding:8px 8px;
+  border:1px solid var(--border);white-space:nowrap;text-align:center;
+  position:sticky;top:0;z-index:10;
+}
+.sheet-table th.req{color:var(--accent);}
+.sheet-table td{border:1px solid var(--border);padding:0;}
+.sheet-table tr:nth-child(even) td{background:rgba(255,255,255,.015);}
+.sheet-table tr:hover td{background:rgba(108,99,255,.06);}
+
+/* editable cell */
+.cell{
+  width:100%;height:34px;background:transparent;color:var(--text);
+  border:none;outline:none;padding:0 8px;font-size:12px;font-family:inherit;
+  text-align:right;
+}
+.cell.left{text-align:left;}
+.cell:focus{background:rgba(108,99,255,.12);color:#fff;}
+.cell[readonly]{color:var(--muted);cursor:default;background:rgba(0,0,0,.2);}
+.cell.calc{color:var(--green);font-weight:600;}
+.cell.calc-warn{color:var(--red);}
+
+/* row number */
+.rn{width:32px;text-align:center;color:var(--muted);font-size:10px;background:#12152a;}
+/* add row btn */
+.add-row-bar{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;background:var(--surface);}
+
+/* brand/date select inside cell */
+select.cell{padding:0 4px;cursor:pointer;}
+
+/* SUMMARY TABLE */
+.sum-table{width:100%;border-collapse:collapse;font-size:12px;}
+.sum-table th{padding:9px 12px;text-align:left;color:var(--muted);font-size:10px;font-weight:500;text-transform:uppercase;border-bottom:1px solid var(--border);}
+.sum-table td{padding:10px 12px;border-bottom:1px solid rgba(46,51,80,.4);}
+.sum-table tr:hover td{background:rgba(108,99,255,.04);}
+.pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.pill-g{background:rgba(0,212,170,.15);color:var(--green);}
+.pill-r{background:rgba(255,107,107,.15);color:var(--red);}
+.pill-y{background:rgba(255,209,102,.15);color:var(--yellow);}
+.num{font-variant-numeric:tabular-nums;font-family:'SF Mono',monospace;font-size:11px;}
+
+/* CHART */
+.chart-wrap canvas{width:100%!important;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* SAVE TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--green);color:#000;border-radius:8px;padding:10px 18px;font-weight:600;font-size:12px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
+
+/* ลบ spinner ลูกศรขึ้น/ลงออกทั้งหมด */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+input[type=number]{-moz-appearance:textfield;}
+
+/* ============================
+   LOADING OVERLAY
+   ============================ */
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+#loadingOverlay{
+  position:fixed;inset:0;background:rgba(15,17,23,.92);z-index:10000;
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  backdrop-filter:blur(6px);
+}
+.loading-spinner{
+  width:52px;height:52px;border:4px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+.loading-msg{color:var(--text);font-size:14px;font-weight:600;letter-spacing:.3px;}
+.loading-sub{color:var(--muted);font-size:11px;}
+/* Saving indicator in header */
+#saveStatus{font-size:11px;padding:4px 10px;border-radius:12px;transition:all .3s;}
+.save-saving{background:rgba(255,209,102,.15);color:#ffd166;}
+.save-ok{background:rgba(0,212,170,.15);color:#00d4aa;}
+.save-err{background:rgba(255,107,107,.15);color:#ff6b6b;}
+/* GAS user badge */
+.user-badge{
+  font-size:11px;color:var(--accent);
+  background:rgba(108,99,255,.12);padding:5px 12px;
+  border-radius:20px;border:1px solid rgba(108,99,255,.3);
+  white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ============================
+   FORECAST TABLE
+   ============================ */
+.fc-table{border-collapse:collapse;width:100%;min-width:max-content;}
+.fc-table th{
+  background:#12152a;color:var(--muted);font-size:10px;font-weight:600;
+  text-transform:uppercase;padding:8px 6px;border:1px solid var(--border);
+  text-align:center;white-space:nowrap;position:sticky;top:0;z-index:4;
+}
+.fc-table td{border:1px solid var(--border);padding:2px 4px;text-align:right;font-size:12px;}
+.fc-plat-row td{background:var(--surface);}
+.fc-plat-row:hover td{background:rgba(108,99,255,.06);}
+.fc-sum-row td{background:#1a1d27!important;}
+.fc-year-total{color:var(--yellow)!important;font-weight:600!important;white-space:nowrap;padding:4px 8px!important;}
+.fc-input{
+  width:90px;min-width:90px;height:28px;background:transparent;
+  color:var(--text);border:none;outline:none;text-align:right;
+  font-size:11px;font-family:inherit;padding:0 5px;
+}
+.fc-input:focus{background:rgba(108,99,255,.12);border-radius:3px;}
+.fc-sticky-brand{position:sticky;left:0;z-index:3;background:var(--surface2)!important;border-right:2px solid var(--border)!important;}
+.fc-sticky-plat{position:sticky;left:90px;z-index:3;background:var(--surface2)!important;border-right:1px solid var(--border)!important;white-space:nowrap;}
+
+/* ============================
+   PERMISSION MODAL
+   ============================ */
+#viewPermModal{
+  position:fixed;inset:0;background:rgba(10,12,20,.75);z-index:5000;
+  display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+#viewPermModal.open{display:flex;}
+.perm-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:22px 26px;min-width:320px;max-width:420px;width:100%;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);animation:fadeIn .2s ease;
+}
+.perm-box h3{font-size:14px;font-weight:700;margin-bottom:6px;}
+.perm-subtitle{font-size:11px;color:var(--muted);margin-bottom:16px;}
+.perm-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;margin-bottom:18px;}
+.perm-item{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;
+  border-radius:8px;border:1px solid var(--border);cursor:pointer;
+  transition:background .15s;
+}
+.perm-item:hover{background:rgba(108,99,255,.08);}
+.perm-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;}
+.perm-item label{font-size:12px;cursor:pointer;flex:1;}
+.perm-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.perm-actions{display:flex;gap:8px;justify-content:flex-end;}
+
+/* ============================
+   AUDIT LOG
+   ============================ */
+.audit-user-sel{background:rgba(108,99,255,.12);border-color:rgba(108,99,255,.4)!important;color:var(--accent)!important;font-weight:600;}
+.a-edit{color:#ffd166;}.a-save{color:#00d4aa;}.a-login{color:#a78bfa;}.a-clear{color:#ff6b6b;}
+.audit-old{color:#ff6b6b;text-decoration:line-through;font-size:11px;}
+.audit-new{color:#00d4aa;font-weight:600;font-size:11px;}
+.audit-field{background:rgba(108,99,255,.12);color:var(--accent);border-radius:4px;padding:1px 6px;font-size:10px;font-family:monospace;}
+.audit-plat{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;}
+.ap-tt{background:rgba(238,29,82,.15);color:#ee1d52;}
+.ap-sp{background:rgba(245,123,36,.15);color:#f57b24;}
+.ap-lz{background:rgba(123,108,244,.15);color:#7b6cf4;}
+.ap-sys{background:rgba(136,146,176,.1);color:#8892b0;}
+.audit-ts{font-size:10px;color:var(--muted);white-space:nowrap;}
+
+/* ============================
+   APM TASK
+   ============================ */
+.apm-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;}
+.apm-emp-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;}
+.apm-emp-card .apm-emp-name{font-weight:700;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.apm-stat-row{display:flex;gap:10px;font-size:11px;margin-bottom:6px;}
+.apm-progress{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+.apm-progress-bar{height:100%;border-radius:3px;transition:width .4s;}
+.apm-pct{font-size:11px;display:flex;justify-content:space-between;margin-top:4px;color:var(--muted);}
+/* status pills */
+.s-ns{background:rgba(136,146,176,.15);color:#8892b0;}
+.s-ip{background:rgba(255,209,102,.2);color:#ffd166;}
+.s-done{background:rgba(0,212,170,.15);color:#00d4aa;}
+.s-block{background:rgba(255,107,107,.15);color:#ff6b6b;}
+.s-hold{background:rgba(167,139,250,.15);color:#a78bfa;}
+.apm-badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:600;}
+/* priority colors */
+.p-high{color:#ff6b6b;font-weight:700;}
+.p-med{color:#ffd166;}
+.p-low{color:#00d4aa;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    <div>
+      <h1>ECOM TEAM</h1>
+      <p>ระบบกรอกข้อมูลและ Dashboard</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <select class="sel" id="selMonth" onchange="onMonthChange()">
+      <option value="all">ทุกเดือน</option>
+      <option value="2026-01">ม.ค. 2026</option>
+      <option value="2026-02">ก.พ. 2026</option>
+      <option value="2026-03" selected>มี.ค. 2026</option>
+      <option value="2026-04">เม.ย. 2026</option>
+      <option value="2026-05">พ.ค. 2026</option>
+      <option value="2026-06">มิ.ย. 2026</option>
+      <option value="2026-07">ก.ค. 2026</option>
+      <option value="2026-08">ส.ค. 2026</option>
+      <option value="2026-09">ก.ย. 2026</option>
+      <option value="2026-10">ต.ค. 2026</option>
+      <option value="2026-11">พ.ย. 2026</option>
+      <option value="2026-12">ธ.ค. 2026</option>
+    </select>
+    <select class="sel" id="selBrand" onchange="onBrandChange()">
+      <option value="all">ทุกแบรนด์</option>
+    </select>
+    <!-- GAS mode: แสดง Google email อัตโนมัติ | Local mode: เลือกชื่อ -->
+    <div id="gasUserBadge" class="user-badge" style="display:none;" title="Logged in via Google">👤 <span id="gasUserEmail">กำลังโหลด...</span></div>
+    <select class="sel audit-user-sel" id="selUser" onchange="setCurrentUser(this.value)" title="เลือกชื่อผู้ใช้งาน">
+      <option value="">👤 เลือกชื่อ</option>
+    </select>
+    <span id="saveStatus"></span>
+    <button class="btn btn-success" onclick="saveAll()">💾 บันทึก</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab" onclick="showPage('config',this)">⚙️ Config</div>
+  <div class="tab tab-tt" onclick="showPage('tt',this)">🔴 Daily_TikTok</div>
+  <div class="tab tab-sp" onclick="showPage('sp',this)">🟠 Daily_Shopee</div>
+  <div class="tab tab-lz" onclick="showPage('lz',this)">🟣 Daily_Lazada</div>
+  <div class="tab" onclick="showPage('monthly',this)">📋 Monthly_PnL</div>
+  <div class="tab active" onclick="showPage('dashboard',this)">📊 Dashboard</div>
+  <div class="tab" onclick="showPage('ads',this)">📢 Ads_Efficiency</div>
+  <div class="tab" onclick="showPage('daily_dash',this)">📅 Daily_Dashboard</div>
+  <div class="tab" onclick="showPage('line',this)">💬 LINE_Data</div>
+  <div class="tab" onclick="showPage('forecast',this)">🔮 Forecast</div>
+  <div class="tab" onclick="showPage('apm',this)">👥 APM Task</div>
+  <div class="tab" onclick="showPage('audit',this)">🔍 Audit Log</div>
+</div>
+
+<div class="main">
+
+<!-- ==================== CONFIG ==================== -->
+<div id="page-config" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">⚙️ Config — ตั้งค่าระบบ</div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">รายชื่อแบรนด์
+        <button class="btn btn-primary btn-sm" onclick="addBrandRow()">+ เพิ่มแบรนด์</button>
+      </div>
+      <table class="sum-table" style="margin-bottom:10px;">
+        <thead><tr><th>#</th><th>รหัส</th><th>ชื่อแบรนด์</th><th>เป้า Margin %</th><th></th></tr></thead>
+        <tbody id="brandConfigTable"></tbody>
+      </table>
+      <button class="btn btn-success btn-sm" onclick="saveBrandConfig()" style="margin-top:8px;">💾 บันทึก Config</button>
+    </div>
+    <div class="card">
+      <div class="card-title">👥 รายชื่อพนักงาน (APM Team)
+        <button class="btn btn-primary btn-sm" onclick="addEmployeeRow()">+ เพิ่มพนักงาน</button>
+      </div>
+      <table class="sum-table" style="margin-bottom:10px;">
+        <thead><tr><th>#</th><th>ชื่อ</th><th>Email (Gmail)</th><th>แบรนด์ที่รับผิดชอบ</th><th>หมายเหตุ</th><th>👑 Admin</th><th>🔑 สิทธิ์ดูงาน</th><th></th></tr></thead>
+        <tbody id="empConfigTable"></tbody>
+      </table>
+      <button class="btn btn-success btn-sm" onclick="saveEmployeeConfig()" style="margin-top:8px;">💾 บันทึกพนักงาน</button>
+    </div>
+  </div>
+  <div style="margin-top:14px;">
+    <div class="card">
+      <div class="card-title">Platform</div>
+      <table class="sum-table">
+        <thead><tr><th>ลำดับ</th><th>รหัส</th><th>ชื่อ Platform</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>TT</td><td>TikTok</td></tr>
+          <tr><td>2</td><td>SP</td><td>Shopee</td></tr>
+          <tr><td>3</td><td>LZ</td><td>Lazada</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:16px;" class="card-title">LINE Messaging API</div>
+      <table class="sum-table">
+        <thead><tr><th>รายการ</th><th>ค่า</th><th>หมายเหตุ</th></tr></thead>
+        <tbody>
+          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
+          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
+          <tr><td>เวลาส่ง</td><td>09:00</td><td style="font-size:11px;color:var(--muted)">ตั้ง Trigger ใน Apps Script</td></tr>
+          <tr><td>ส่งสรุปรวม</td><td><span class="pill pill-g">YES</span></td><td></td></tr>
+          <tr><td>ส่งแยกแบรนด์</td><td><span class="pill pill-g">YES</span></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div id="page-dashboard" class="page active">
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="g2">
+    <div class="card"><div class="card-title">GMV แยก Platform</div><div class="chart-wrap"><canvas id="cPlatform" height="200"></canvas></div></div>
+    <div class="card"><div class="card-title">Net Margin % แยกวัน <span style="color:var(--muted);font-size:11px;font-weight:400;">เส้นแดง=8.5%</span></div><div class="chart-wrap"><canvas id="cNMTrend" height="200"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Brand Performance <span style="font-size:11px;color:var(--muted);font-weight:400;">คลิก Brand เพื่อดูรายละเอียด</span></div>
+    <div style="overflow-x:auto;">
+      <table class="sum-table" id="tBrand"></table>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="card-title">GMV Brand × Platform</div><div class="chart-wrap"><canvas id="cBrandPlat" height="220"></canvas></div></div>
+    <div class="card"><div class="card-title">ROAS แยก Brand <span style="color:var(--muted);font-size:11px;font-weight:400;">เป้า 3x</span></div><div class="chart-wrap"><canvas id="cROAS" height="220"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ==================== TIKTOK SHEET ==================== -->
+<div id="page-tt" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:14px;font-weight:700;color:var(--tt);">🔴 Daily TikTok</div>
+      <span id="tt-brand-badge"></span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);" id="tt-rowcount"></div>
+  </div>
+  <div class="sheet-wrap">
+    <table class="sheet-table" id="sheet-tt">
+      <thead><tr>
+        <th class="rn">#</th>
+        <th class="req" style="min-width:110px">Date</th>
+        <th style="min-width:100px">GMV (฿)</th>
+        <th style="min-width:70px">Orders</th>
+        <th style="min-width:100px">Sale Ads GMV</th>
+        <th style="min-width:100px">Organic GMV</th>
+        <th style="min-width:100px">GMV Live</th>
+        <th style="min-width:100px">COGS</th>
+        <th style="min-width:90px">Promo</th>
+        <th style="min-width:80px">Free</th>
+        <th style="min-width:80px">KOL</th>
+        <th style="min-width:100px">Prod Live</th>
+        <th style="min-width:100px">Comm Live</th>
+        <th style="min-width:110px">Comm Creator</th>
+        <th style="min-width:110px">Cost GMV Ads</th>
+        <th style="min-width:110px">Cost GMV Live</th>
+        <th style="min-width:100px;color:var(--green)">Total Exp</th>
+        <th style="min-width:100px;color:var(--green)">Net Margin</th>
+        <th style="min-width:70px;color:var(--green)">NM%</th>
+        <th style="min-width:70px;color:var(--yellow)">ROAS</th>
+      </tr></thead>
+      <tbody id="tbody-tt"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== SHOPEE SHEET ==================== -->
+<div id="page-sp" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:14px;font-weight:700;color:var(--sp);">🟠 Daily Shopee</div>
+      <span id="sp-brand-badge"></span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);" id="sp-rowcount"></div>
+  </div>
+  <div class="sheet-wrap">
+    <table class="sheet-table" id="sheet-sp">
+      <thead><tr>
+        <th class="rn">#</th>
+        <th class="req" style="min-width:110px">Date</th>
+        <th style="min-width:100px">GMV (฿)</th>
+        <th style="min-width:70px">Orders</th>
+        <th style="min-width:100px">COGS</th>
+        <th style="min-width:90px">Promo</th>
+        <th style="min-width:80px">Free</th>
+        <th style="min-width:110px">Comm Creator</th>
+        <th style="min-width:90px">Plat Fee</th>
+        <th style="min-width:80px">SP ADS</th>
+        <th style="min-width:80px">FB Cpas</th>
+        <th style="min-width:90px">Affiliate</th>
+        <th style="min-width:100px">Search Ads</th>
+        <th style="min-width:90px">Shop Ads</th>
+        <th style="min-width:100px">Product Ads</th>
+        <th style="min-width:100px;color:var(--green)">Total Exp</th>
+        <th style="min-width:100px;color:var(--green)">Net Margin</th>
+        <th style="min-width:70px;color:var(--green)">NM%</th>
+        <th style="min-width:70px;color:var(--yellow)">ROAS</th>
+      </tr></thead>
+      <tbody id="tbody-sp"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== LAZADA SHEET ==================== -->
+<div id="page-lz" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:14px;font-weight:700;color:var(--lz);">🟣 Daily Lazada</div>
+      <span id="lz-brand-badge"></span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);" id="lz-rowcount"></div>
+  </div>
+  <div class="sheet-wrap">
+    <table class="sheet-table" id="sheet-lz">
+      <thead><tr>
+        <th class="rn">#</th>
+        <th class="req" style="min-width:110px">Date</th>
+        <th style="min-width:100px">GMV (฿)</th>
+        <th style="min-width:70px">Orders</th>
+        <th style="min-width:100px">Organic GMV</th>
+        <th style="min-width:100px">COGS</th>
+        <th style="min-width:90px">Promo</th>
+        <th style="min-width:80px">Free</th>
+        <th style="min-width:110px">Comm Creator</th>
+        <th style="min-width:90px">Plat Fee</th>
+        <th style="min-width:80px">LZSD</th>
+        <th style="min-width:100px">LZ GMV Max</th>
+        <th style="min-width:90px">Aff LZ</th>
+        <th style="min-width:100px;color:var(--green)">Total Exp</th>
+        <th style="min-width:100px;color:var(--green)">Net Margin</th>
+        <th style="min-width:70px;color:var(--green)">NM%</th>
+        <th style="min-width:70px;color:var(--yellow)">ROAS</th>
+      </tr></thead>
+      <tbody id="tbody-lz"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== MONTHLY P&L ==================== -->
+<div id="page-monthly" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">📋 Monthly P&L Summary</div>
+  <div class="kpi-grid" id="monthlyKpi"></div>
+  <div class="card">
+    <div class="card-title">P&L แยก Brand × Platform</div>
+    <div style="overflow-x:auto;"><table class="sum-table" id="tMonthly"></table></div>
+  </div>
+</div>
+
+<!-- ==================== ADS EFFICIENCY ==================== -->
+<div id="page-ads" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">📢 Ads &amp; Marketing Efficiency</div>
+  <div class="kpi-grid" id="adsKpi"></div>
+  <div class="g2">
+    <div class="card"><div class="card-title">Ads Spend vs GMV แยก Brand</div><div class="chart-wrap"><canvas id="cAdsGMV" height="240"></canvas></div></div>
+    <div class="card"><div class="card-title">Ads Breakdown แยก Platform</div><div class="chart-wrap"><canvas id="cAdsPlatform" height="240"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Ads Efficiency ต่อ Brand</div>
+    <div style="overflow-x:auto;"><table class="sum-table" id="tAds">
+      <thead><tr>
+        <th>Brand</th><th>Ads Spend</th><th>GMV</th><th>ROAS</th>
+        <th>CPO (Cost/Order)</th><th>Ads/GMV%</th>
+        <th>TikTok Ads</th><th>Shopee Ads</th><th>Lazada Ads</th><th>Status</th>
+      </tr></thead>
+      <tbody id="tbAds"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ==================== DAILY DASHBOARD ==================== -->
+<div id="page-daily_dash" class="page">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;">📅 Daily_Dashboard</div>
+    <select class="sel" id="ddDate" onchange="renderDailyDash()">
+      <option value="all">ทุกวัน</option>
+    </select>
+    <select class="sel" id="ddBrand" onchange="renderDailyDash()">
+      <option value="all">ทุกแบรนด์</option>
+    </select>
+    <select class="sel" id="ddPlat" onchange="renderDailyDash()">
+      <option value="all">ทุก Platform</option>
+      <option value="tt">TikTok</option>
+      <option value="sp">Shopee</option>
+      <option value="lz">Lazada</option>
+    </select>
+  </div>
+  <div class="kpi-grid" id="ddKpi"></div>
+  <div class="card">
+    <div class="card-title">รายการรายวัน</div>
+    <div style="overflow-x:auto;"><table class="sum-table" id="tDailyDash">
+      <thead><tr>
+        <th>Date</th><th>Brand</th><th>Platform</th>
+        <th>GMV</th><th>Orders</th><th>COGS</th><th>Ads</th>
+        <th>Net Margin</th><th>NM%</th><th>ROAS</th>
+      </tr></thead>
+      <tbody id="tbDailyDash"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ==================== LINE DATA ==================== -->
+<div id="page-line" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">💬 LINE_Data — ตัวอย่างข้อความ LINE</div>
+  <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
+    <select class="sel" id="lineDate" onchange="renderLINE()">
+      <option value="today">วันนี้</option>
+      <option value="all">ทั้งเดือน</option>
+    </select>
+    <select class="sel" id="lineBrandSel" onchange="renderLINE()">
+      <option value="all">ทุกแบรนด์</option>
+    </select>
+    <button class="btn btn-primary btn-sm" onclick="renderLINE()">🔄 อัพเดต</button>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:10px;">📊 Summary Report</div>
+      <pre id="lineSum" style="background:#0d1f0d;border:1px solid #1d4a1d;border-radius:8px;padding:14px;font-size:12px;line-height:1.8;color:#90ee90;white-space:pre-wrap;font-family:'Courier New',monospace;"></pre>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:10px;">🏷️ Per-Brand Report</div>
+      <pre id="lineBrandMsg" style="background:#0d1f0d;border:1px solid #1d4a1d;border-radius:8px;padding:14px;font-size:12px;line-height:1.8;color:#90ee90;white-space:pre-wrap;font-family:'Courier New',monospace;"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FORECAST ==================== -->
+<div id="page-forecast" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+    <div style="font-size:14px;font-weight:700;">🔮 Forecast — เป้ายอดขายรายเดือน</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="sel" id="fcYear" onchange="renderForecast()">
+        <option value="2026">2026</option>
+        <option value="2027">2027</option>
+        <option value="2025">2025</option>
+      </select>
+      <button class="btn btn-success btn-sm" onclick="saveForecast()">💾 บันทึกเป้า</button>
+    </div>
+  </div>
+
+  <!-- Summary strip -->
+  <div id="fcSummaryStrip" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"></div>
+
+  <!-- Main forecast table -->
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div style="overflow-x:auto;max-height:65vh;overflow-y:auto;">
+      <table class="fc-table">
+        <thead>
+          <tr>
+            <th style="min-width:90px;position:sticky;left:0;z-index:6;background:#12152a;">แบรนด์</th>
+            <th style="min-width:80px;position:sticky;left:90px;z-index:6;background:#12152a;">Platform</th>
+            <th>JAN</th><th>FEB</th><th>MAR</th><th>APR</th><th>MAY</th><th>JUN</th>
+            <th>JUL</th><th>AUG</th><th>SEP</th><th>OCT</th><th>NOV</th><th>DEC</th>
+            <th style="background:#1e2235;min-width:100px;">รวมปี</th>
+          </tr>
+        </thead>
+        <tbody id="fcTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="g2" style="margin-top:14px;">
+    <div class="card"><div class="card-title">GMV Target vs Actual (เดือนนี้)</div><div class="chart-wrap"><canvas id="cForecastGMV" height="240"></canvas></div></div>
+    <div class="card"><div class="card-title">NM% Target vs Actual</div><div class="chart-wrap"><canvas id="cForecastNM" height="240"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ==================== APM TASK ==================== -->
+<div id="page-apm" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">👥 APM Task — ติดตามงานทีม</div>
+
+  <!-- Employee Summary Cards -->
+  <div class="apm-summary" id="apmSummary"></div>
+
+  <!-- Task Table -->
+  <div class="card">
+    <div class="card-title">
+      <div style="display:flex;align-items:center;gap:10px;">
+        รายการงานประจำเดือน
+        <span id="apmMyBadge" style="display:none;background:rgba(108,99,255,.2);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600;"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select class="sel" id="apmFilterEmp" onchange="renderAPM()">
+          <option value="all">👤 ทุกคน</option>
+        </select>
+        <select class="sel" id="apmFilterStatus" onchange="renderAPM()">
+          <option value="all">📋 ทุก Status</option>
+          <option value="not_started">⏳ Not Started</option>
+          <option value="in_progress">🔄 In Progress</option>
+          <option value="done">✅ Done</option>
+          <option value="blocked">❌ Blocked</option>
+          <option value="on_hold">🔁 On Hold</option>
+        </select>
+        <select class="sel" id="apmFilterBrand" onchange="renderAPM()">
+          <option value="all">🏷 ทุกแบรนด์</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="addAPMTask()">+ เพิ่มงาน</button>
+        <button class="btn btn-success btn-sm" onclick="saveAPM()">💾 บันทึก</button>
+      </div>
+    </div>
+    <div class="sheet-wrap">
+      <table class="sheet-table">
+        <thead><tr>
+          <th class="rn">#</th>
+          <th style="min-width:110px">👤 พนักงาน</th>
+          <th style="min-width:100px">🏷 แบรนด์</th>
+          <th style="min-width:220px">📝 Task / งาน</th>
+          <th style="min-width:200px">📋 รายละเอียดงาน</th>
+          <th style="min-width:125px">📊 Status</th>
+          <th style="min-width:110px">📅 Start Date</th>
+          <th style="min-width:110px">📅 Due Date</th>
+          <th style="min-width:180px">📎 หมายเหตุ</th>
+          <th style="min-width:36px"></th>
+        </tr></thead>
+        <tbody id="apmTbody"></tbody>
+      </table>
+    </div>
+    <div style="padding:8px 12px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);">
+      แสดงงานของเดือนที่เลือกด้านบน — ใช้ dropdown กรองพนักงาน / status / แบรนด์
+    </div>
+  </div>
+</div>
+
+<!-- ==================== AUDIT LOG ==================== -->
+<div id="page-audit" class="page">
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">🔍 Audit Log — ประวัติการแก้ไข</div>
+
+  <!-- Summary KPIs -->
+  <div class="kpi-grid" id="auditKpi" style="margin-bottom:14px;"></div>
+
+  <!-- Filters + Controls -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-title">
+      กรองข้อมูล
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportAuditCSV()">⬇ Export CSV</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmClearAudit()">🗑 ล้าง Log</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <select class="sel" id="auditFilterUser" onchange="renderAudit()">
+        <option value="all">👤 ทุกคน</option>
+      </select>
+      <select class="sel" id="auditFilterPlat" onchange="renderAudit()">
+        <option value="all">📋 ทุก Platform</option>
+        <option value="tt">🔴 TikTok</option>
+        <option value="sp">🟠 Shopee</option>
+        <option value="lz">🟣 Lazada</option>
+        <option value="system">⚙️ System</option>
+      </select>
+      <select class="sel" id="auditFilterAction" onchange="renderAudit()">
+        <option value="all">🔖 ทุก Action</option>
+        <option value="แก้ไข">✏️ แก้ไข</option>
+        <option value="บันทึก">💾 บันทึก</option>
+        <option value="เข้าสู่ระบบ">👤 เข้าสู่ระบบ</option>
+      </select>
+      <select class="sel" id="auditFilterBrand" onchange="renderAudit()">
+        <option value="all">🏷 ทุกแบรนด์</option>
+      </select>
+      <input class="sel" type="text" id="auditSearch" placeholder="🔎 ค้นหา..." oninput="renderAudit()" style="width:160px;">
+      <span style="font-size:11px;color:var(--muted);">แสดง: <select class="sel" id="auditLimit" onchange="renderAudit()" style="padding:3px 6px;">
+        <option value="50">50 รายการ</option>
+        <option value="100">100 รายการ</option>
+        <option value="200">200 รายการ</option>
+        <option value="0">ทั้งหมด</option>
+      </select></span>
+    </div>
+  </div>
+
+  <!-- Audit Table -->
+  <div class="card">
+    <div class="sheet-wrap">
+      <table class="sheet-table" id="auditTable">
+        <thead><tr>
+          <th class="rn">#</th>
+          <th style="min-width:140px">🕐 เวลา</th>
+          <th style="min-width:100px">👤 ผู้ใช้</th>
+          <th style="min-width:70px">Platform</th>
+          <th style="min-width:90px">🏷 Brand</th>
+          <th style="min-width:90px">📅 วันที่ข้อมูล</th>
+          <th style="min-width:110px">📝 Field</th>
+          <th style="min-width:120px">ก่อนแก้</th>
+          <th style="min-width:120px">หลังแก้</th>
+          <th style="min-width:80px">Action</th>
+        </tr></thead>
+        <tbody id="auditTbody"></tbody>
+      </table>
+    </div>
+    <div style="padding:8px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);" id="auditCount"></div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- LOADING OVERLAY -->
+<!-- ==================== PERMISSION MODAL ==================== -->
+<div id="viewPermModal">
+  <div class="perm-box">
+    <h3>🔑 กำหนดสิทธิ์การมองเห็น</h3>
+    <p class="perm-subtitle" id="permSubtitle">พนักงานคนนี้จะเห็นงานของตัวเอง + คนที่เลือกด้านล่าง</p>
+    <div class="perm-list" id="permCheckList"></div>
+    <div class="perm-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeViewPerm()">ยกเลิก</button>
+      <button class="btn btn-primary btn-sm" onclick="saveViewPerm()">💾 บันทึกสิทธิ์</button>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-msg" id="loadingMsg">กำลังโหลดข้อมูล...</div>
+  <div class="loading-sub" id="loadingSub">กรุณารอสักครู่</div>
+</div>
+
+<div class="toast" id="toast">✅ บันทึกแล้ว!</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+// ============================================================
+// GAS DETECTION — ตรวจสอบว่ารันใน Google Apps Script หรือไม่
+// ============================================================
+const IS_GAS = (typeof google !== 'undefined' && google.script != null);
+
+const NM_TARGET = 8.5;
+const ROAS_TARGET = 3;
+const BRAND_COLORS = ['#6c63ff','#00d4aa','#ff6b6b','#ffd166','#a78bfa','#60a5fa'];
+
+// Platform definitions: [key, fields...]
+// Each field: { key, label, type, calc }
+const PLAT_FIELDS = {
+  tt: [
+    {k:'date',t:'date'},{k:'brand',t:'brand'},
+    {k:'gmv',t:'n'},{k:'orders',t:'n'},
+    {k:'saleAds',t:'n'},{k:'organic',t:'n'},{k:'gmvLive',t:'n'},
+    {k:'cogs',t:'n'},{k:'promo',t:'n'},{k:'free',t:'n'},
+    {k:'kol',t:'n'},{k:'prodLive',t:'n'},{k:'commLive',t:'n'},{k:'commCreator',t:'n'},
+    {k:'costGMVAds',t:'n'},{k:'costGMVLive',t:'n'},
+    // calculated
+    {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
+  ],
+  sp: [
+    {k:'date',t:'date'},{k:'brand',t:'brand'},
+    {k:'gmv',t:'n'},{k:'orders',t:'n'},
+    {k:'cogs',t:'n'},{k:'promo',t:'n'},{k:'free',t:'n'},{k:'commCreator',t:'n'},
+    {k:'platFee',t:'n'},{k:'spAds',t:'n'},{k:'fbCpas',t:'n'},
+    {k:'affiliate',t:'n'},{k:'searchAds',t:'n'},{k:'shopAds',t:'n'},{k:'productAds',t:'n'},
+    {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
+  ],
+  lz: [
+    {k:'date',t:'date'},{k:'brand',t:'brand'},
+    {k:'gmv',t:'n'},{k:'orders',t:'n'},
+    {k:'organic',t:'n'},{k:'cogs',t:'n'},{k:'promo',t:'n'},{k:'free',t:'n'},
+    {k:'commCreator',t:'n'},{k:'platFee',t:'n'},
+    {k:'lzsd',t:'n'},{k:'lzGmvMax',t:'n'},{k:'affLz',t:'n'},
+    {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
+  ]
+};
+
+// Formula calculators per platform
+function calcRow(plat, r) {
+  const n = k => parseFloat(r[k]||0)||0;
+  if(plat==='tt'){
+    const totalExp = n('cogs')+n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGMVAds')+n('costGMVLive');
+    const nm = n('gmv') - totalExp;
+    const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
+    const adsTotal = n('costGMVAds')+n('costGMVLive');
+    const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
+    return {...r, totalExp, nm, nmPct, roas};
+  }
+  if(plat==='sp'){
+    const totalExp = n('cogs')+n('promo')+n('free')+n('commCreator')+n('platFee')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    const nm = n('gmv') - totalExp;
+    const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
+    const adsTotal = n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
+    return {...r, totalExp, nm, nmPct, roas};
+  }
+  if(plat==='lz'){
+    const totalExp = n('cogs')+n('promo')+n('free')+n('commCreator')+n('platFee')+n('lzsd')+n('lzGmvMax')+n('affLz');
+    const nm = n('gmv') - totalExp;
+    const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
+    const adsTotal = n('lzsd')+n('lzGmvMax')+n('affLz');
+    const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
+    return {...r, totalExp, nm, nmPct, roas};
+  }
+  return r;
+}
+
+// ============================================================
+// STATE — in-memory + localStorage
+// ============================================================
+let DB = { tt:[], sp:[], lz:[], brands:[] };
+let BRANDS = [];
+
+// ============================================================
+// DB DEFAULTS — ใช้ร่วมกันทั้ง GAS และ Local
+// ============================================================
+function initDefaults(){
+  if(!DB.brands||DB.brands.length===0) DB.brands=['BRD_A','BRD_B','BRD_C','BRD_D','BRD_E','BRD_F'];
+  if(!DB.tt) DB.tt=[];
+  if(!DB.sp) DB.sp=[];
+  if(!DB.lz) DB.lz=[];
+  if(!DB.apmTasks) DB.apmTasks=[];
+  if(!DB.auditLog) DB.auditLog=[];
+  if(!DB.employees||DB.employees.length===0){
+    DB.employees=[
+      {name:'พนักงาน 1',brands:'',note:''},
+      {name:'พนักงาน 2',brands:'',note:''},
+      {name:'พนักงาน 3',brands:'',note:''},
+      {name:'พนักงาน 4',brands:'',note:''},
+      {name:'พนักงาน 5',brands:'',note:''}
+    ];
+  }
+  BRANDS = DB.brands;
+  updateBrandDropdowns();
+  updateUserDropdown();
+}
+
+// ============================================================
+// LOAD DB — GAS: โหลดจาก Google Sheets | Local: localStorage
+// ============================================================
+function loadDB(){
+  if(IS_GAS) return; // GAS จะโหลดผ่าน initApp()
+  try{
+    const saved = localStorage.getItem('ecom_db');
+    if(saved) DB = JSON.parse(saved);
+  }catch(e){}
+  initDefaults();
+}
+
+// ============================================================
+// SAVE DB — GAS: บันทึกไป Google Sheets | Local: localStorage
+// ============================================================
+function saveDB(){
+  if(IS_GAS){
+    google.script.run
+      .withFailureHandler(e=>console.error('saveDB error:',e))
+      .saveAllData(DB);
+    return;
+  }
+  localStorage.setItem('ecom_db', JSON.stringify(DB));
+}
+
+// ============================================================
+// LOADING OVERLAY
+// ============================================================
+function showLoadingOverlay(show, msg, sub){
+  const el = document.getElementById('loadingOverlay');
+  if(!el) return;
+  el.style.display = show ? 'flex' : 'none';
+  if(msg) document.getElementById('loadingMsg').textContent = msg;
+  if(sub) document.getElementById('loadingSub').textContent = sub;
+}
+
+function setSaveStatus(type, msg){
+  const el = document.getElementById('saveStatus');
+  if(!el) return;
+  el.textContent = msg;
+  el.className = type ? 'save-'+type : '';
+  if(type==='ok'||type==='err') setTimeout(()=>{ el.textContent=''; el.className=''; },3000);
+}
+
+// ============================================================
+// INIT APP — GAS: โหลดจาก Sheets + auth | Local: localStorage
+// ============================================================
+function initApp(){
+  if(!IS_GAS){
+    // โหมด Standalone (ไฟล์ local)
+    loadDB();
+    genAllSheetRows();
+    renderDashboard();
+    setInterval(saveAll, 300000); // autosave ทุก 5 นาที
+    return;
+  }
+
+  // โหมด Google Apps Script
+  showLoadingOverlay(true,'กำลังเข้าสู่ระบบ...','กรุณารอสักครู่');
+
+  // ดึงข้อมูล user จาก Google
+  google.script.run
+    .withSuccessHandler(function(user){
+      CURRENT_USER = user.email;
+      const badge = document.getElementById('gasUserBadge');
+      const emailEl = document.getElementById('gasUserEmail');
+      const localSel = document.getElementById('selUser');
+      if(badge){ badge.style.display='inline-flex'; badge.style.alignItems='center'; badge.style.gap='4px'; }
+      if(emailEl) emailEl.textContent = user.email;
+      if(localSel) localSel.style.display='none'; // ซ่อน local selector
+      // Log login
+      logAudit('system','','','login', '', user.email, 'เข้าสู่ระบบ');
+    })
+    .withFailureHandler(e=>console.warn('getCurrentUser failed:',e))
+    .getCurrentUser();
+
+  // โหลดข้อมูล
+  showLoadingOverlay(true,'กำลังโหลดข้อมูล...','กำลังอ่านจาก Google Sheets...');
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(data && typeof data==='object') DB = data;
+      initDefaults();
+      initCurrentUser(); // sync user
+      genAllSheetRows();
+      renderDashboard();
+      showLoadingOverlay(false);
+      setSaveStatus('ok','✅ โหลดข้อมูลแล้ว');
+      setInterval(function(){ autoSaveGAS(); }, 120000); // autosave ทุก 2 นาที
+    })
+    .withFailureHandler(function(err){
+      console.error('loadAllData failed:', err);
+      showLoadingOverlay(false);
+      showToast('❌ โหลดข้อมูลไม่สำเร็จ: '+(err.message||err));
+      setSaveStatus('err','❌ โหลดไม่ได้');
+      // Fallback: ใช้ค่า default
+      initDefaults();
+      genAllSheetRows();
+      renderDashboard();
+    })
+    .loadAllData();
+}
+
+function autoSaveGAS(){
+  if(!IS_GAS) return;
+  ['tt','sp','lz'].forEach(plat=>{
+    const tbody=document.getElementById('tbody-'+plat);
+    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
+  });
+  google.script.run
+    .withSuccessHandler(()=>setSaveStatus('ok','✅ Auto-saved'))
+    .withFailureHandler(e=>console.warn('autosave failed:',e))
+    .saveAllData(DB);
+}
+
+function saveAll(){
+  // sync table → DB
+  ['tt','sp','lz'].forEach(plat=>{
+    const tbody=document.getElementById('tbody-'+plat);
+    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
+  });
+  const brand=document.getElementById('selBrand').value;
+  logAudit('system','',brand,'','','','บันทึก');
+
+  if(IS_GAS){
+    setSaveStatus('saving','⏳ กำลังบันทึก...');
+    google.script.run
+      .withSuccessHandler(function(res){
+        if(res&&res.success){
+          showToast('✅ บันทึกแล้ว! ('+(res.savedBy||'')+')');;
+          setSaveStatus('ok','✅ บันทึกแล้ว');
+        } else {
+          showToast('❌ บันทึกไม่สำเร็จ');
+          setSaveStatus('err','❌ บันทึกไม่ได้');
+        }
+        refreshAll();
+      })
+      .withFailureHandler(function(err){
+        showToast('❌ บันทึกไม่สำเร็จ: '+(err.message||err));
+        setSaveStatus('err','❌ Error');
+      })
+      .saveAllData(DB);
+  } else {
+    saveDB();
+    showToast('✅ บันทึกแล้ว!');
+    refreshAll();
+  }
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2000);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(n,d=0){ return Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtB(n){ return '฿'+fmt(n); }
+function p(n){ return parseFloat(n||0)||0; }
+function todayStr(){ return new Date().toISOString().split('T')[0]; }
+
+function filterMonth(rows){
+  const m = document.getElementById('selMonth').value;
+  if(m==='all') return rows;
+  return rows.filter(r => {
+    const d = String(r.date||'');
+    return d.startsWith(m);
+  });
+}
+function filterBrand(rows){
+  const b = document.getElementById('selBrand').value;
+  if(b==='all') return rows;
+  return rows.filter(r=>r.brand===b);
+}
+function filterRows(rows){ return filterBrand(filterMonth(rows)); }
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function showPage(id, el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el) el.classList.add('active');
+  if(id==='dashboard') renderDashboard();
+  if(id==='monthly') renderMonthly();
+  if(id==='config') renderConfig();
+  if(id==='ads') renderAds();
+  if(id==='daily_dash') renderDailyDash();
+  if(id==='line') renderLINE();
+  if(id==='forecast') renderForecast();
+  if(id==='apm') renderAPM();
+  if(id==='audit') renderAudit();
+}
+
+// ============================================================
+// BRAND DROPDOWNS
+// ============================================================
+function updateBrandDropdowns(){
+  const sel = document.getElementById('selBrand');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">ทุกแบรนด์</option>';
+  BRANDS.forEach(b => {
+    const o = document.createElement('option');
+    o.value=b; o.text=b;
+    sel.appendChild(o);
+  });
+  if(cur) sel.value=cur;
+  // อัพเดต badge และ user dropdown
+  if(document.getElementById('tt-brand-badge')) updateBrandLabels();
+  updateUserDropdown();
+}
+
+function makeBrandSelect(val=''){
+  const s = document.createElement('select');
+  s.className='cell left';
+  s.innerHTML = '<option value="">-- เลือก --</option>' + BRANDS.map(b=>`<option value="${b}" ${b===val?'selected':''}>${b}</option>`).join('');
+  s.addEventListener('change', ()=>{ setTimeout(recalcAll,50); });
+  return s;
+}
+
+// ============================================================
+// SPREADSHEET RENDERING
+// ============================================================
+function getTableRows(plat){
+  const tbody = document.getElementById('tbody-'+plat);
+  const rows = [];
+  Array.from(tbody.querySelectorAll('tr[data-row]')).forEach(tr => {
+    const r = {};
+    PLAT_FIELDS[plat].forEach(f => {
+      if(f.t==='c'||f.t==='cp'||f.t==='cx') return;
+      const el = tr.querySelector(`[data-field="${f.k}"]`);
+      if(el) r[f.k] = el.value || el.tagName==='SELECT' ? el.value : '';
+    });
+    rows.push(calcRow(plat, r));
+  });
+  return rows;
+}
+
+function renderSheet(plat, rows){
+  const tbody = document.getElementById('tbody-'+plat);
+  tbody.innerHTML = '';
+  (rows||[]).forEach((r,i) => renderRow(plat, r, i));
+}
+
+function renderRow(plat, r={}, idx){
+  const tbody = document.getElementById('tbody-'+plat);
+  const tr = document.createElement('tr');
+  tr.dataset.row = idx;
+  const c = calcRow(plat, r);
+
+  // Row number
+  const tdN = document.createElement('td');
+  tdN.className='rn'; tdN.style.padding='0 6px'; tdN.textContent=idx+1;
+  tr.appendChild(tdN);
+
+  PLAT_FIELDS[plat].forEach(f => {
+    const td = document.createElement('td');
+
+    if(f.t==='date'){
+      const inp = document.createElement('input');
+      inp.type='date'; inp.className='cell left'; inp.dataset.field=f.k;
+      inp.value = r[f.k] || todayStr();
+      td.appendChild(inp);
+
+    } else if(f.t==='brand'){
+      // ใช้ hidden input เก็บค่าแบรนด์ ไม่แสดง column
+      const inp = document.createElement('input');
+      inp.type='hidden'; inp.dataset.field=f.k;
+      // ใช้ brand จาก global selector ถ้าไม่มีค่าใน row
+      const selB = document.getElementById('selBrand').value;
+      inp.value = r[f.k] || (selB!=='all' ? selB : '');
+      td.style.display='none'; // ซ่อน td ทั้งหมด
+      td.appendChild(inp);
+
+    } else if(f.t==='n'){
+      const inp = document.createElement('input');
+      inp.type='number'; inp.className='cell'; inp.dataset.field=f.k;
+      inp.value = r[f.k]||''; inp.min='0'; inp.step='any';
+      inp.placeholder='0';
+      inp.addEventListener('input', ()=>{ recalcRow(tr, plat); });
+      // Audit: จับค่าเก่าตอน focus และบันทึก log ตอน blur
+      inp.addEventListener('focus', ()=>{ inp.dataset.oldval = inp.value; });
+      inp.addEventListener('blur', ()=>{
+        const ov = inp.dataset.oldval;
+        const nv = inp.value;
+        if(ov !== undefined && ov !== nv){
+          const dateEl = tr.querySelector('[data-field="date"]');
+          const brandEl = tr.querySelector('[data-field="brand"]');
+          logAudit(plat, dateEl?.value||'', brandEl?.value||'', f.k, ov||'0', nv||'0', 'แก้ไข');
+        }
+      });
+      td.appendChild(inp);
+
+    } else if(f.t==='c'){
+      const inp = document.createElement('input');
+      inp.type='text'; inp.readOnly=true; inp.dataset.field=f.k;
+      const val = c[f.k]||0;
+      inp.className = 'cell calc' + (val<0?' calc-warn':'');
+      inp.value = fmt(val);
+      td.appendChild(inp);
+
+    } else if(f.t==='cp'){
+      const inp = document.createElement('input');
+      inp.type='text'; inp.readOnly=true; inp.dataset.field=f.k;
+      const val = c[f.k]||0;
+      inp.className = 'cell calc' + (val<NM_TARGET?' calc-warn':'');
+      inp.value = val.toFixed(1)+'%';
+      td.appendChild(inp);
+
+    } else if(f.t==='cx'){
+      const inp = document.createElement('input');
+      inp.type='text'; inp.readOnly=true; inp.dataset.field=f.k;
+      const val = c[f.k]||0;
+      inp.className = 'cell calc';
+      inp.value = val.toFixed(1)+'x';
+      td.appendChild(inp);
+    }
+
+    tr.appendChild(td);
+  });
+
+  tbody.appendChild(tr);
+}
+
+function recalcRow(tr, plat){
+  const r = {};
+  PLAT_FIELDS[plat].forEach(f => {
+    if(f.t==='c'||f.t==='cp'||f.t==='cx') return;
+    const el = tr.querySelector(`[data-field="${f.k}"]`);
+    if(el) r[f.k] = el.value;
+  });
+  const c = calcRow(plat, r);
+  PLAT_FIELDS[plat].forEach(f => {
+    if(f.t!=='c'&&f.t!=='cp'&&f.t!=='cx') return;
+    const el = tr.querySelector(`[data-field="${f.k}"]`);
+    if(!el) return;
+    const val = c[f.k]||0;
+    if(f.t==='c'){
+      el.value = fmt(val);
+      el.className = 'cell calc'+(val<0?' calc-warn':'');
+    } else if(f.t==='cp'){
+      el.value = val.toFixed(1)+'%';
+      el.className = 'cell calc'+(val<NM_TARGET?' calc-warn':'');
+    } else if(f.t==='cx'){
+      el.value = val.toFixed(1)+'x';
+    }
+  });
+}
+
+function recalcAll(){
+  ['tt','sp','lz'].forEach(plat=>{
+    document.querySelectorAll(`#tbody-${plat} tr[data-row]`).forEach(tr=>{
+      recalcRow(tr,plat);
+    });
+  });
+}
+
+function addRow(plat){
+  const tbody = document.getElementById('tbody-'+plat);
+  const idx = tbody.querySelectorAll('tr[data-row]').length;
+  renderRow(plat, {}, idx);
+}
+
+function clearEmpty(plat){
+  const tbody = document.getElementById('tbody-'+plat);
+  Array.from(tbody.querySelectorAll('tr[data-row]')).forEach(tr=>{
+    const gmv = tr.querySelector('[data-field="gmv"]');
+    if(!gmv || !gmv.value || gmv.value==='0') tr.remove();
+  });
+  reindex(plat);
+}
+
+function reindex(plat){
+  const tbody = document.getElementById('tbody-'+plat);
+  Array.from(tbody.querySelectorAll('tr[data-row]')).forEach((tr,i)=>{
+    tr.dataset.row=i;
+    const rn = tr.querySelector('.rn');
+    if(rn) rn.textContent=i+1;
+  });
+}
+
+// ============================================================
+// AGGREGATION
+// ============================================================
+function aggregateData(){
+  const allRows = [];
+  ['tt','sp','lz'].forEach(plat=>{
+    const rows = filterRows(DB[plat]);
+    rows.forEach(r=>{
+      if(!r.gmv||!r.brand) return;
+      allRows.push({...r, platform:plat});
+    });
+  });
+  return allRows;
+}
+
+function aggregateByBrand(rows){
+  const brands = {};
+  rows.forEach(r=>{
+    const b = r.brand;
+    if(!b) return;
+    if(!brands[b]) brands[b]={gmv:0,nm:0,ads:0,orders:0,cogs:0,
+      byPlat:{tt:{gmv:0,ads:0,orders:0},sp:{gmv:0,ads:0,orders:0},lz:{gmv:0,ads:0,orders:0}}};
+    const n = k=>p(r[k]);
+    brands[b].gmv+=n('gmv'); brands[b].nm+=n('nm');
+    brands[b].orders+=n('orders'); brands[b].cogs+=n('cogs');
+    let ads=0;
+    if(r.platform==='tt') ads=n('costGMVAds')+n('costGMVLive');
+    else if(r.platform==='sp') ads=n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    else if(r.platform==='lz') ads=n('lzsd')+n('lzGmvMax')+n('affLz');
+    brands[b].ads+=ads;
+    brands[b].byPlat[r.platform].gmv+=n('gmv');
+    brands[b].byPlat[r.platform].ads+=ads;
+    brands[b].byPlat[r.platform].orders+=n('orders');
+  });
+  // derived
+  Object.values(brands).forEach(d=>{
+    d.nm_pct = d.gmv>0 ? d.nm/d.gmv*100 : 0;
+    d.roas = d.ads>0 ? d.gmv/d.ads : 0;
+  });
+  return brands;
+}
+
+function aggregateByPlat(rows){
+  const p={tt:{gmv:0,nm:0,ads:0},sp:{gmv:0,nm:0,ads:0},lz:{gmv:0,nm:0,ads:0}};
+  rows.forEach(r=>{
+    if(!r.gmv) return;
+    const pl=r.platform;
+    p[pl].gmv+=parseFloat(r.gmv||0);
+    p[pl].nm+=parseFloat(r.nm||0);
+    let ads=0;
+    if(pl==='tt') ads=parseFloat(r.costGMVAds||0)+parseFloat(r.costGMVLive||0);
+    else if(pl==='sp') ads=['spAds','fbCpas','affiliate','searchAds','shopAds','productAds'].reduce((s,k)=>s+parseFloat(r[k]||0),0);
+    else if(pl==='lz') ads=['lzsd','lzGmvMax','affLz'].reduce((s,k)=>s+parseFloat(r[k]||0),0);
+    p[pl].ads+=ads;
+  });
+  return p;
+}
+
+function aggregateByDate(rows){
+  const byDate={};
+  rows.forEach(r=>{
+    if(!r.gmv||!r.date) return;
+    if(!byDate[r.date]) byDate[r.date]={gmv:0,nm:0};
+    byDate[r.date].gmv+=p(r.gmv);
+    byDate[r.date].nm+=p(r.nm);
+  });
+  return Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+
+// ============================================================
+// DASHBOARD RENDER
+// ============================================================
+const chartRef={};
+function mkChart(id,cfg){
+  if(chartRef[id]) chartRef[id].destroy();
+  chartRef[id]=new Chart(document.getElementById(id),cfg);
+}
+
+function renderDashboard(){
+  const rows = aggregateData();
+  const byBrand = aggregateByBrand(rows);
+  const byPlat = aggregateByPlat(rows);
+  const brandKeys = Object.keys(byBrand);
+
+  const totalGMV = rows.reduce((s,r)=>s+p(r.gmv),0);
+  const totalNM = rows.reduce((s,r)=>s+p(r.nm),0);
+  const totalAds = brandKeys.reduce((s,b)=>s+byBrand[b].ads,0);
+  const totalOrders = rows.reduce((s,r)=>s+p(r.orders),0);
+  const nmPct = totalGMV>0?totalNM/totalGMV*100:0;
+  const roas = totalAds>0?totalGMV/totalAds:0;
+
+  // KPIs
+  const kpis=[
+    {label:'Total GMV',val:'฿'+fmt(totalGMV),c:'#6c63ff'},
+    {label:'Net Margin',val:nmPct.toFixed(1)+'%',c:nmPct>=NM_TARGET?'#00d4aa':'#ff6b6b',sub:`เป้า ${NM_TARGET}% ${nmPct>=NM_TARGET?'✅':'⚠️'}`},
+    {label:'Net Margin (฿)',val:'฿'+fmt(totalNM),c:'#00d4aa'},
+    {label:'Ads Spend',val:'฿'+fmt(totalAds),c:'#ffd166'},
+    {label:'ROAS',val:roas.toFixed(1)+'x',c:roas>=ROAS_TARGET?'#00d4aa':'#ff6b6b',sub:`เป้า ${ROAS_TARGET}x`},
+    {label:'Total Orders',val:fmt(totalOrders),c:'#a78bfa'},
+  ];
+  document.getElementById('kpiGrid').innerHTML=kpis.map(k=>`
+    <div class="kpi" style="--c:${k.c}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-val">${k.val}</div>
+      ${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}
+    </div>`).join('');
+
+  // Chart: GMV by Platform
+  const platNames={tt:'TikTok',sp:'Shopee',lz:'Lazada'};
+  const platColors={tt:'#ee1d52',sp:'#f57b24',lz:'#7b6cf4'};
+  mkChart('cPlatform',{
+    type:'doughnut',
+    data:{labels:['TikTok','Shopee','Lazada'],
+      datasets:[{data:[byPlat.tt.gmv,byPlat.sp.gmv,byPlat.lz.gmv],
+        backgroundColor:['#ee1d52','#f57b24','#7b6cf4'],borderWidth:0,hoverOffset:6}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8892b0',font:{size:11},padding:14}},
+      tooltip:{callbacks:{label:c=>' ฿'+fmt(c.raw)}}}}
+  });
+
+  // Chart: NM% trend
+  const dated = aggregateByDate(rows);
+  const labels = dated.map(([d])=>d.slice(5));
+  const nmVals = dated.map(([,v])=>v.gmv>0?(v.nm/v.gmv*100):0);
+  mkChart('cNMTrend',{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'NM%',data:nmVals,borderColor:'#6c63ff',backgroundColor:'rgba(108,99,255,.1)',fill:true,tension:.4,pointRadius:2},
+      {label:'Target',data:labels.map(()=>8.5),borderColor:'#ff6b6b',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false}
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#8892b0',font:{size:11}}}},
+      scales:{x:{ticks:{color:'#8892b0',font:{size:9}},grid:{color:'rgba(255,255,255,.03)'}},
+        y:{ticks:{color:'#8892b0',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.03)'}}}}
+  });
+
+  // Brand Table
+  const tbl=document.getElementById('tBrand');
+  tbl.innerHTML=`<thead><tr>
+    <th>Brand</th><th>GMV</th><th>COGS</th><th>Ads</th><th>Net Margin</th><th>NM%</th><th>ROAS</th><th>Orders</th><th>Status</th>
+    </tr></thead>`;
+  const tb=document.createElement('tbody');
+  brandKeys.forEach((b,i)=>{
+    const d=byBrand[b];
+    const nmOk=d.nm_pct>=NM_TARGET,roasOk=d.roas>=ROAS_TARGET;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><span style="display:flex;align-items:center;gap:6px;font-weight:600;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${BRAND_COLORS[i%BRAND_COLORS.length]};flex-shrink:0;"></span>${b}
+      </span></td>
+      <td class="num">${fmtB(d.gmv)}</td>
+      <td class="num">${fmtB(d.cogs)}</td>
+      <td class="num">${fmtB(d.ads)}</td>
+      <td class="num">${fmtB(d.nm)}</td>
+      <td><span class="pill ${nmOk?'pill-g':d.nm_pct>=6?'pill-y':'pill-r'}">${d.nm_pct.toFixed(1)}%</span></td>
+      <td><span class="pill ${roasOk?'pill-g':'pill-y'}">${d.roas.toFixed(1)}x</span></td>
+      <td class="num">${fmt(d.orders)}</td>
+      <td style="font-size:11px">${nmOk?'On Target 🟢':d.nm_pct>=6?'Watch ⚠️':'Below 🔴'}</td>`;
+    tb.appendChild(tr);
+  });
+  // Total row
+  const tf=document.createElement('tfoot');
+  tf.innerHTML=`<tr style="font-weight:700;background:rgba(108,99,255,.08)">
+    <td>TOTAL</td>
+    <td class="num">${fmtB(totalGMV)}</td>
+    <td class="num">${fmtB(brandKeys.reduce((s,b)=>s+byBrand[b].cogs,0))}</td>
+    <td class="num">${fmtB(totalAds)}</td>
+    <td class="num">${fmtB(totalNM)}</td>
+    <td><span class="pill ${nmPct>=NM_TARGET?'pill-g':'pill-r'}">${nmPct.toFixed(1)}%</span></td>
+    <td><span class="pill pill-g">${roas.toFixed(1)}x</span></td>
+    <td class="num">${fmt(totalOrders)}</td><td></td></tr>`;
+  tbl.appendChild(tb); tbl.appendChild(tf);
+
+  // Chart: Brand × Platform stacked
+  mkChart('cBrandPlat',{
+    type:'bar',
+    data:{labels:brandKeys,datasets:[
+      {label:'TikTok',data:brandKeys.map(b=>byBrand[b].byPlat.tt.gmv),backgroundColor:'rgba(238,29,82,.75)',borderRadius:3},
+      {label:'Shopee',data:brandKeys.map(b=>byBrand[b].byPlat.sp.gmv),backgroundColor:'rgba(245,123,36,.75)',borderRadius:3},
+      {label:'Lazada',data:brandKeys.map(b=>byBrand[b].byPlat.lz.gmv),backgroundColor:'rgba(123,108,244,.75)',borderRadius:3},
+    ]},
+    options:{responsive:true,scales:{x:{stacked:true,ticks:{color:'#8892b0'},grid:{display:false}},
+      y:{stacked:true,ticks:{color:'#8892b0',callback:v=>'฿'+fmt(v)},grid:{color:'rgba(255,255,255,.03)'}}},
+      plugins:{legend:{labels:{color:'#8892b0',font:{size:11}}}}}
+  });
+
+  // Chart: ROAS
+  mkChart('cROAS',{
+    type:'bar',
+    data:{labels:brandKeys,datasets:[
+      {label:'ROAS',data:brandKeys.map(b=>byBrand[b].roas),backgroundColor:brandKeys.map((_,i)=>BRAND_COLORS[i%BRAND_COLORS.length]),borderRadius:6},
+      {label:'Target 3x',data:brandKeys.map(()=>3),type:'line',borderColor:'#ffd166',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false}
+    ]},
+    options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},
+      y:{ticks:{color:'#8892b0',callback:v=>v+'x'},grid:{color:'rgba(255,255,255,.03)'}}},
+      plugins:{legend:{labels:{color:'#8892b0',font:{size:11}}}}}
+  });
+}
+
+// ============================================================
+// MONTHLY P&L
+// ============================================================
+function renderMonthly(){
+  const allRows=aggregateData();
+  const byBrand=aggregateByBrand(allRows);
+  const brandKeys=Object.keys(byBrand);
+  const totalGMV=allRows.reduce((s,r)=>s+p(r.gmv),0);
+  const totalNM=allRows.reduce((s,r)=>s+p(r.nm),0);
+  const totalAds=brandKeys.reduce((s,b)=>s+byBrand[b].ads,0);
+  const totalOrders=allRows.reduce((s,r)=>s+p(r.orders),0);
+  const nmPct=totalGMV>0?totalNM/totalGMV*100:0;
+  const roas=totalAds>0?totalGMV/totalAds:0;
+  const kpis=[
+    {label:'GMV รวม',val:'฿'+fmt(totalGMV),c:'#6c63ff'},
+    {label:'NM%',val:nmPct.toFixed(1)+'%',c:nmPct>=NM_TARGET?'#00d4aa':'#ff6b6b'},
+    {label:'Net Margin',val:'฿'+fmt(totalNM),c:'#00d4aa'},
+    {label:'Ads Spend',val:'฿'+fmt(totalAds),c:'#ffd166'},
+    {label:'ROAS',val:roas.toFixed(1)+'x',c:roas>=ROAS_TARGET?'#00d4aa':'#ff6b6b'},
+    {label:'Orders',val:fmt(totalOrders),c:'#a78bfa'},
+  ];
+  document.getElementById('monthlyKpi').innerHTML=kpis.map(k=>`
+    <div class="kpi" style="--c:${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div></div>`).join('');
+
+  const tbl=document.getElementById('tMonthly');
+  tbl.innerHTML=`<thead><tr>
+    <th>Brand</th>
+    <th>TikTok GMV</th><th>TikTok Ads</th>
+    <th>Shopee GMV</th><th>Shopee Ads</th>
+    <th>Lazada GMV</th><th>Lazada Ads</th>
+    <th>GMV รวม</th><th>NM (฿)</th><th>NM%</th><th>ROAS</th>
+    </tr></thead>`;
+  const tb=document.createElement('tbody');
+  brandKeys.forEach(b=>{
+    const d=byBrand[b];
+    const nmOk=d.nm_pct>=NM_TARGET;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td style="font-weight:600">${b}</td>
+      <td class="num">${fmtB(d.byPlat.tt.gmv)}</td><td class="num">${fmtB(d.byPlat.tt.ads)}</td>
+      <td class="num">${fmtB(d.byPlat.sp.gmv)}</td><td class="num">${fmtB(d.byPlat.sp.ads)}</td>
+      <td class="num">${fmtB(d.byPlat.lz.gmv)}</td><td class="num">${fmtB(d.byPlat.lz.ads)}</td>
+      <td class="num" style="font-weight:700">${fmtB(d.gmv)}</td>
+      <td class="num">${fmtB(d.nm)}</td>
+      <td><span class="pill ${nmOk?'pill-g':d.nm_pct>=6?'pill-y':'pill-r'}">${d.nm_pct.toFixed(1)}%</span></td>
+      <td><span class="pill ${d.roas>=ROAS_TARGET?'pill-g':'pill-y'}">${d.roas.toFixed(1)}x</span></td>`;
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+}
+
+// ============================================================
+// EXPORT CSV
+// ============================================================
+function exportCSV(){
+  ['tt','sp','lz'].forEach(plat=>{
+    const rows=DB[plat];
+    if(!rows.length) return;
+    const keys=Object.keys(rows[0]);
+    const csv=[keys.join(','),...rows.map(r=>keys.map(k=>r[k]??'').join(','))].join('\n');
+    const a=document.createElement('a');
+    a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+    a.download=`Daily_${plat.toUpperCase()}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  });
+}
+
+// ============================================================
+// REFRESH ALL
+// ============================================================
+function refreshAll(){
+  // sync from table if on sheet page
+  ['tt','sp','lz'].forEach(plat=>{
+    const tbody=document.getElementById('tbody-'+plat);
+    if(tbody && tbody.children.length>0){
+      DB[plat]=getTableRows(plat);
+    }
+  });
+  const active=document.querySelector('.page.active');
+  if(active?.id==='page-dashboard') renderDashboard();
+  if(active?.id==='page-monthly') renderMonthly();
+  if(active?.id==='page-apm') renderAPM();
+}
+
+// ============================================================
+// CONFIG TAB
+// ============================================================
+function renderConfig(){
+  const tbody = document.getElementById('brandConfigTable');
+  tbody.innerHTML = '';
+  DB.brands.forEach((b,i)=>{
+    const nmTarget = DB.brandTargets?.[b]?.nm || 8.5;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><input class="cell left" value="${b}" data-bi="${i}" data-field="code" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:90px"></td>
+      <td><input class="cell left" value="${DB.brandNames?.[b]||b}" data-bi="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:120px"></td>
+      <td><input class="cell" type="number" value="${nmTarget}" data-bi="${i}" data-field="nm" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:70px" min="0" max="100" step="0.1"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+  // fill lineToken/lineGroup
+  if(document.getElementById('lineToken')) document.getElementById('lineToken').value = DB.lineToken||'';
+  if(document.getElementById('lineGroup')) document.getElementById('lineGroup').value = DB.lineGroup||'';
+  // Render employee config
+  renderEmpConfig();
+}
+
+function addBrandRow(){
+  const tbody = document.getElementById('brandConfigTable');
+  const i = tbody.children.length;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${i+1}</td>
+    <td><input class="cell left" value="BRD_${String.fromCharCode(65+i)}" data-bi="${i}" data-field="code" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:90px"></td>
+    <td><input class="cell left" value="Brand ${String.fromCharCode(65+i)}" data-bi="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:120px"></td>
+    <td><input class="cell" type="number" value="8.5" data-bi="${i}" data-field="nm" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:70px"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function saveBrandConfig(){
+  const rows = document.querySelectorAll('#brandConfigTable tr');
+  const newBrands=[], targets={}, names={};
+  rows.forEach(tr=>{
+    const code = tr.querySelector('[data-field="code"]')?.value?.trim();
+    const name = tr.querySelector('[data-field="name"]')?.value?.trim();
+    const nm = parseFloat(tr.querySelector('[data-field="nm"]')?.value||8.5);
+    if(code){ newBrands.push(code); targets[code]={nm}; names[code]=name||code; }
+  });
+  DB.brands = newBrands;
+  DB.brandTargets = targets;
+  DB.brandNames = names;
+  DB.lineToken = document.getElementById('lineToken')?.value||'';
+  DB.lineGroup = document.getElementById('lineGroup')?.value||'';
+  BRANDS.length=0; newBrands.forEach(b=>BRANDS.push(b));
+  saveDB(); updateBrandDropdowns();
+  showToast('✅ บันทึก Config แล้ว!');
+}
+
+// ============================================================
+// ADS EFFICIENCY TAB
+// ============================================================
+function renderAds(){
+  const rows = aggregateData();
+  const byBrand = aggregateByBrand(rows);
+  const brandKeys = Object.keys(byBrand);
+  const byPlat = aggregateByPlat(rows);
+
+  const totalAds = brandKeys.reduce((s,b)=>s+byBrand[b].ads,0);
+  const totalGMV = rows.reduce((s,r)=>s+p(r.gmv),0);
+  const totalOrders = rows.reduce((s,r)=>s+p(r.orders),0);
+  const roas = totalAds>0?totalGMV/totalAds:0;
+
+  document.getElementById('adsKpi').innerHTML = [
+    {label:'Total Ads Spend',val:'฿'+fmt(totalAds),c:'#ffd166'},
+    {label:'Avg ROAS',val:roas.toFixed(1)+'x',c:roas>=ROAS_TARGET?'#00d4aa':'#ff6b6b'},
+    {label:'Ads/GMV%',val:totalGMV>0?(totalAds/totalGMV*100).toFixed(1)+'%':'0%',c:'#a78bfa'},
+    {label:'CPO (Cost/Order)',val:totalOrders>0?'฿'+fmt(totalAds/totalOrders):'—',c:'#6c63ff'},
+  ].map(k=>`<div class="kpi" style="--c:${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div></div>`).join('');
+
+  mkChart('cAdsGMV',{type:'bar',data:{labels:brandKeys,datasets:[
+    {label:'Ads Spend',data:brandKeys.map(b=>byBrand[b].ads),backgroundColor:'rgba(255,209,102,.75)',borderRadius:4},
+    {label:'GMV',data:brandKeys.map(b=>byBrand[b].gmv),backgroundColor:'rgba(108,99,255,.75)',borderRadius:4}
+  ]},options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0',callback:v=>'฿'+fmt(v)},grid:{color:'rgba(255,255,255,.03)'}}},plugins:{legend:{labels:{color:'#8892b0'}}}}});
+
+  mkChart('cAdsPlatform',{type:'pie',data:{labels:['TikTok','Shopee','Lazada'],
+    datasets:[{data:[byPlat.tt.ads,byPlat.sp.ads,byPlat.lz.ads],backgroundColor:['#ee1d52','#f57b24','#7b6cf4'],borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#8892b0',font:{size:11}}}}}});
+
+  const tbody = document.getElementById('tbAds');
+  tbody.innerHTML = brandKeys.map((b,i)=>{
+    const d=byBrand[b];
+    const cpo=d.orders>0?fmt(d.ads/d.orders):'—';
+    const adsGmv=d.gmv>0?(d.ads/d.gmv*100).toFixed(1):'0';
+    return `<tr>
+      <td style="font-weight:600"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${BRAND_COLORS[i%BRAND_COLORS.length]}"></span>${b}</span></td>
+      <td class="num">${'฿'+fmt(d.ads)}</td>
+      <td class="num">${'฿'+fmt(d.gmv)}</td>
+      <td><span class="pill ${d.roas>=ROAS_TARGET?'pill-g':'pill-y'}">${d.roas.toFixed(1)}x</span></td>
+      <td class="num">฿${cpo}</td>
+      <td><span class="pill pill-y">${adsGmv}%</span></td>
+      <td class="num">${'฿'+fmt(d.byPlat.tt.ads)}</td>
+      <td class="num">${'฿'+fmt(d.byPlat.sp.ads)}</td>
+      <td class="num">${'฿'+fmt(d.byPlat.lz.ads)}</td>
+      <td>${d.roas>=ROAS_TARGET?'Good 🟢':d.roas>=2?'Watch ⚠️':'Poor 🔴'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// DAILY DASHBOARD TAB
+// ============================================================
+function renderDailyDash(){
+  const allRows = [];
+  ['tt','sp','lz'].forEach(plat=>{
+    DB[plat].forEach(r=>{ if(r.gmv) allRows.push({...r,platform:plat}); });
+  });
+
+  // populate date dropdown
+  const dates = [...new Set(allRows.map(r=>r.date).filter(Boolean))].sort().reverse();
+  const ddDate = document.getElementById('ddDate');
+  const curDate = ddDate.value;
+  ddDate.innerHTML = '<option value="all">ทุกวัน</option>' + dates.map(d=>`<option value="${d}" ${d===curDate?'selected':''}>${d}</option>`).join('');
+
+  // populate brand dropdown
+  const ddBrand = document.getElementById('ddBrand');
+  const curBrand = ddBrand.value;
+  ddBrand.innerHTML = '<option value="all">ทุกแบรนด์</option>' + BRANDS.map(b=>`<option value="${b}" ${b===curBrand?'selected':''}>${b}</option>`).join('');
+
+  const selDate = ddDate.value;
+  const selBrand = ddBrand.value;
+  const selPlat = document.getElementById('ddPlat').value;
+
+  let filtered = allRows;
+  if(selDate!=='all') filtered=filtered.filter(r=>r.date===selDate);
+  if(selBrand!=='all') filtered=filtered.filter(r=>r.brand===selBrand);
+  if(selPlat!=='all') filtered=filtered.filter(r=>r.platform===selPlat);
+
+  const tGMV=filtered.reduce((s,r)=>s+p(r.gmv),0);
+  const tNM=filtered.reduce((s,r)=>s+p(r.nm),0);
+  const tOrders=filtered.reduce((s,r)=>s+p(r.orders),0);
+  const nmPct=tGMV>0?tNM/tGMV*100:0;
+
+  document.getElementById('ddKpi').innerHTML=[
+    {label:'GMV',val:'฿'+fmt(tGMV),c:'#6c63ff'},
+    {label:'Net Margin',val:'฿'+fmt(tNM),c:'#00d4aa'},
+    {label:'NM%',val:nmPct.toFixed(1)+'%',c:nmPct>=NM_TARGET?'#00d4aa':'#ff6b6b'},
+    {label:'Orders',val:fmt(tOrders),c:'#a78bfa'},
+  ].map(k=>`<div class="kpi" style="--c:${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div></div>`).join('');
+
+  const platName={tt:'TikTok',sp:'Shopee',lz:'Lazada'};
+  document.getElementById('tbDailyDash').innerHTML = filtered.map(r=>{
+    let ads=0;
+    if(r.platform==='tt') ads=p(r.costGMVAds)+p(r.costGMVLive);
+    else if(r.platform==='sp') ads=['spAds','fbCpas','affiliate','searchAds','shopAds','productAds'].reduce((s,k)=>s+p(r[k]),0);
+    else if(r.platform==='lz') ads=['lzsd','lzGmvMax','affLz'].reduce((s,k)=>s+p(r[k]),0);
+    const nm=p(r.nm), gmv=p(r.gmv);
+    const nmPct=gmv>0?nm/gmv*100:0;
+    const roas=ads>0?gmv/ads:0;
+    return `<tr>
+      <td class="num">${r.date||'—'}</td>
+      <td style="font-weight:600">${r.brand||'—'}</td>
+      <td><span style="padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600;background:${r.platform==='tt'?'rgba(238,29,82,.15)':r.platform==='sp'?'rgba(245,123,36,.15)':'rgba(123,108,244,.15)'};color:${r.platform==='tt'?'#ff6b8a':r.platform==='sp'?'#ffa05c':'#a78bfa'}">${platName[r.platform]}</span></td>
+      <td class="num">${'฿'+fmt(gmv)}</td>
+      <td class="num">${fmt(p(r.orders))}</td>
+      <td class="num">${'฿'+fmt(p(r.cogs)||0)}</td>
+      <td class="num">${'฿'+fmt(ads)}</td>
+      <td class="num">${'฿'+fmt(nm)}</td>
+      <td><span class="pill ${nmPct>=NM_TARGET?'pill-g':nmPct>=6?'pill-y':'pill-r'}">${nmPct.toFixed(1)}%</span></td>
+      <td><span class="pill ${roas>=ROAS_TARGET?'pill-g':'pill-y'}">${roas.toFixed(1)}x</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีข้อมูล</td></tr>';
+}
+
+// ============================================================
+// LINE DATA TAB
+// ============================================================
+function renderLINE(){
+  // populate brand dropdown
+  const sel=document.getElementById('lineBrandSel');
+  if(sel.options.length<=1){
+    BRANDS.forEach(b=>{ const o=document.createElement('option'); o.value=b; o.text=b; sel.appendChild(o); });
+  }
+
+  const allRows=aggregateData();
+  const byBrand=aggregateByBrand(allRows);
+  const brandKeys=Object.keys(byBrand);
+  const totalGMV=allRows.reduce((s,r)=>s+p(r.gmv),0);
+  const totalNM=allRows.reduce((s,r)=>s+p(r.nm),0);
+  const totalAds=brandKeys.reduce((s,b)=>s+byBrand[b].ads,0);
+  const totalOrders=allRows.reduce((s,r)=>s+p(r.orders),0);
+  const nmPct=totalGMV>0?totalNM/totalGMV*100:0;
+  const roas=totalAds>0?totalGMV/totalAds:0;
+
+  const today=new Date();
+  const d=today.getDate(), m=today.getMonth();
+  const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const dateLabel=`${d} ${thMonths[m+1]} ${today.getFullYear()+543}`;
+
+  const byPlat=aggregateByPlat(allRows);
+
+  document.getElementById('lineSum').textContent =
+`📊 ECOM รายวัน — ${dateLabel}
+════════════════════
+💰 GMV รวม     : ฿${fmt(totalGMV)}
+📦 Orders      : ${fmt(totalOrders)} orders
+💹 Net Margin  : ${nmPct.toFixed(1)}% ${nmPct>=NM_TARGET?'✅':'⚠️'}
+📢 Ads Spend   : ฿${fmt(totalAds)}
+🎯 ROAS        : ${roas.toFixed(1)}x ${roas>=ROAS_TARGET?'✅':'⚠️'}
+════════════════════
+🔴 TikTok  : ฿${fmt(byPlat.tt.gmv)}
+🟠 Shopee  : ฿${fmt(byPlat.sp.gmv)}
+🟣 Lazada  : ฿${fmt(byPlat.lz.gmv)}
+════════════════════
+NM Target: ${NM_TARGET}% | ROAS Target: ${ROAS_TARGET}x`;
+
+  const warnings=brandKeys.filter(b=>byBrand[b].nm_pct<NM_TARGET);
+  document.getElementById('lineBrandMsg').textContent =
+`🏷️ Brand Breakdown — ${dateLabel}
+════════════════════
+${brandKeys.map(b=>{
+  const d2=byBrand[b];
+  const icon=d2.nm_pct>=NM_TARGET?'🟢':d2.nm_pct>=6?'🟡':'🔴';
+  return `${icon} ${b}: ฿${fmt(d2.gmv)} | NM ${d2.nm_pct.toFixed(1)}%`;
+}).join('\n')}
+════════════════════
+${warnings.length?'🚨 ต้องดูแลด่วน:\n'+warnings.map(b=>`⚠️ ${b} → NM ${byBrand[b].nm_pct.toFixed(1)}%`).join('\n'):'✅ ทุกแบรนด์ผ่านเป้า NM!'}`;
+}
+
+// ============================================================
+// FORECAST TAB
+// ============================================================
+const FC_MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const FC_PLAT = [{k:'tt',label:'TikTok',color:'var(--tt)'},{k:'sp',label:'Shopee',color:'var(--sp)'},{k:'lz',label:'Lazada',color:'var(--lz)'}];
+
+function renderForecast(){
+  if(!DB.forecastGMV) DB.forecastGMV = {};
+  const brands = DB.brands||[];
+  const tbody = document.getElementById('fcTbody');
+  if(!tbody) return;
+
+  if(brands.length===0){
+    tbody.innerHTML='<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:24px;">เพิ่มแบรนด์ใน Config ก่อนครับ</td></tr>';
+    return;
+  }
+
+  // หา current month index (0-based) จาก selMonth
+  const selM = document.getElementById('selMonth')?.value||'';
+  const curMonthIdx = selM&&selM!=='all' ? parseInt(selM.split('-')[1])-1 : new Date().getMonth();
+
+  let html = '';
+  brands.forEach((brand, bi)=>{
+    const color = EMP_COLORS[bi%EMP_COLORS.length];
+    if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={tt:Array(12).fill(0),sp:Array(12).fill(0),lz:Array(12).fill(0)};
+    const bData = DB.forecastGMV[brand];
+
+    FC_PLAT.forEach((p,pi)=>{
+      if(!bData[p.k]) bData[p.k]=Array(12).fill(0);
+      const vals = bData[p.k];
+      const yearTotal = vals.reduce((a,b)=>a+b,0);
+
+      html += `<tr class="fc-plat-row" data-brand="${brand}" data-plat="${p.k}">`;
+      if(pi===0){
+        html += `<td rowspan="3" class="fc-sticky-brand" style="font-weight:700;color:${color};vertical-align:middle;text-align:center;padding:6px;">${brand}</td>`;
+      }
+      html += `<td class="fc-sticky-plat" style="color:${p.color};font-size:11px;font-weight:600;padding:4px 8px;">${p.label}</td>`;
+
+      vals.forEach((v,mi)=>{
+        const isCur = mi===curMonthIdx;
+        html += `<td style="padding:1px;${isCur?'background:rgba(108,99,255,.08);':''}" >
+          <input class="fc-input" type="number" value="${v||''}" placeholder="0"
+            onchange="fcUpdate('${brand}','${p.k}',${mi},this.value)"
+            style="${isCur?'color:var(--accent);font-weight:600;':''}">
+        </td>`;
+      });
+      html += `<td class="fc-year-total">${yearTotal>0?'฿'+fmt(yearTotal):'-'}</td></tr>`;
+    });
+
+    // Sum row
+    const sumByMonth = Array(12).fill(0).map((_,mi)=>FC_PLAT.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
+    const sumYear = sumByMonth.reduce((a,b)=>a+b,0);
+    html += `<tr class="fc-sum-row" id="fcSum_${brand.replace(/[^a-z0-9]/gi,'_')}">
+      <td colspan="2" class="fc-sticky-brand" style="font-weight:700;color:${color};font-size:12px;text-align:left;padding:5px 10px;">รวม ${brand}</td>
+      ${sumByMonth.map((v,mi)=>`<td style="font-weight:700;color:${color};padding:5px 6px;${mi===curMonthIdx?'background:rgba(108,99,255,.08);':''}">${v>0?'฿'+fmt(v):'-'}</td>`).join('')}
+      <td class="fc-year-total">${sumYear>0?'฿'+fmt(sumYear):'-'}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+
+  // Summary strip (เป้าเดือนนี้)
+  renderFCSummaryStrip(curMonthIdx);
+  renderForecastCharts();
+}
+
+function renderFCSummaryStrip(monthIdx){
+  const strip = document.getElementById('fcSummaryStrip');
+  if(!strip||!DB.forecastGMV) return;
+  const brands = DB.brands||[];
+  strip.innerHTML = brands.map((b,bi)=>{
+    const bData = DB.forecastGMV[b]||{};
+    const tt = bData.tt?.[monthIdx]||0;
+    const sp = bData.sp?.[monthIdx]||0;
+    const lz = bData.lz?.[monthIdx]||0;
+    const total = tt+sp+lz;
+    const color = EMP_COLORS[bi%EMP_COLORS.length];
+    return total>0?`<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${color};border-radius:8px;padding:10px 14px;min-width:160px;">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">${b}</div>
+      <div style="font-size:16px;font-weight:700;color:${color};">฿${fmt(total)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">
+        🔴${fmt(tt)} 🟠${fmt(sp)} 🟣${fmt(lz)}
+      </div>
+    </div>`:'';
+  }).join('');
+}
+
+function fcUpdate(brand, plat, monthIdx, value){
+  if(!DB.forecastGMV) DB.forecastGMV={};
+  if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={tt:Array(12).fill(0),sp:Array(12).fill(0),lz:Array(12).fill(0)};
+  if(!DB.forecastGMV[brand][plat]) DB.forecastGMV[brand][plat]=Array(12).fill(0);
+  DB.forecastGMV[brand][plat][monthIdx] = parseFloat(value)||0;
+
+  // อัพเดต sum row live
+  const safeId = brand.replace(/[^a-z0-9]/gi,'_');
+  const sumRow = document.getElementById('fcSum_'+safeId);
+  if(sumRow){
+    const bData = DB.forecastGMV[brand];
+    const sumByMonth = Array(12).fill(0).map((_,mi)=>FC_PLAT.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
+    const sumYear = sumByMonth.reduce((a,b)=>a+b,0);
+    const cells = sumRow.querySelectorAll('td');
+    sumByMonth.forEach((v,i)=>{ if(cells[i+2]) cells[i+2].textContent = v>0?'฿'+fmt(v):'-'; });
+    const lastCell = cells[cells.length-1];
+    if(lastCell) lastCell.textContent = sumYear>0?'฿'+fmt(sumYear):'-';
+  }
+
+  // อัพเดต year total ของแถว platform
+  const bData = DB.forecastGMV[brand];
+  const platTotal = (bData[plat]||[]).reduce((a,b)=>a+b,0);
+  const platRow = document.querySelector(`tr.fc-plat-row[data-brand="${brand}"][data-plat="${plat}"]`);
+  if(platRow){
+    const ytd = platRow.querySelector('td.fc-year-total');
+    if(ytd) ytd.textContent = platTotal>0?'฿'+fmt(platTotal):'-';
+  }
+
+  // อัพเดต summary strip
+  const selM = document.getElementById('selMonth')?.value||'';
+  const curMonthIdx = selM&&selM!=='all' ? parseInt(selM.split('-')[1])-1 : new Date().getMonth();
+  renderFCSummaryStrip(curMonthIdx);
+}
+
+function renderForecastCharts(){
+  const rows = aggregateData();
+  const byBrand = aggregateByBrand(rows);
+  const brands = DB.brands||[];
+  if(!DB.forecastGMV) DB.forecastGMV={};
+
+  const selM = document.getElementById('selMonth')?.value||'';
+  const mi = selM&&selM!=='all' ? parseInt(selM.split('-')[1])-1 : new Date().getMonth();
+
+  // GMV Target vs Actual (เดือนที่เลือก)
+  mkChart('cForecastGMV',{type:'bar',data:{labels:brands,datasets:[
+    {label:'Target',data:brands.map(b=>FC_PLAT.reduce((s,p)=>(DB.forecastGMV[b]?.[p.k]?.[mi]||0)+s,0)),backgroundColor:'rgba(255,209,102,.5)',borderRadius:4},
+    {label:'Actual',data:brands.map(b=>byBrand[b]?.gmv||0),backgroundColor:'rgba(108,99,255,.75)',borderRadius:4}
+  ]},options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0',callback:v=>'฿'+fmt(v)},grid:{color:'rgba(255,255,255,.03)'}}},plugins:{legend:{labels:{color:'#8892b0'}}}}});
+
+  mkChart('cForecastNM',{type:'bar',data:{labels:brands,datasets:[
+    {label:'NM% Target',data:brands.map(b=>DB.brandTargets?.[b]?.nm||NM_TARGET),backgroundColor:'rgba(255,209,102,.5)',borderRadius:4},
+    {label:'NM% Actual',data:brands.map(b=>byBrand[b]?.nm_pct||0),
+      backgroundColor:brands.map(b=>(byBrand[b]?.nm_pct||0)>=(DB.brandTargets?.[b]?.nm||NM_TARGET)?'rgba(0,212,170,.75)':'rgba(255,107,107,.75)'),borderRadius:4}
+  ]},options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.03)'}}},plugins:{legend:{labels:{color:'#8892b0'}}}}});
+}
+
+function saveForecast(){
+  saveDB();
+  showToast('✅ บันทึกเป้าหมายแล้ว!');
+}
+
+// ============================================================
+// EMPLOYEE CONFIG
+// ============================================================
+const EMP_COLORS = ['#6c63ff','#00d4aa','#ff6b6b','#ffd166','#a78bfa','#60a5fa'];
+
+function renderEmpConfig(){
+  const tbody = document.getElementById('empConfigTable');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  const emps = DB.employees||[];
+  emps.forEach((emp,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
+      <td><input class="cell left" value="${emp.name||''}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+      <td><input class="cell left" value="${emp.email||''}" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+      <td><input class="cell left" value="${emp.brands||''}" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+      <td><input class="cell left" value="${emp.note||''}" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+      <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" ${emp.isAdmin?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+      <td style="text-align:center;">
+        <button class="btn btn-ghost btn-sm" onclick="openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
+      </td>
+      <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addEmployeeRow(){
+  const tbody = document.getElementById('empConfigTable');
+  const i = tbody.children.length;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
+    <td><input class="cell left" value="พนักงาน ${i+1}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+    <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+    <td style="text-align:center;">
+      <button class="btn btn-ghost btn-sm" onclick="saveEmployeeConfig();openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
+    </td>
+    <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function saveEmployeeConfig(){
+  const rows = document.querySelectorAll('#empConfigTable tr');
+  const newEmps = [];
+  rows.forEach(tr=>{
+    const name = tr.querySelector('[data-field="name"]')?.value?.trim();
+    const email = tr.querySelector('[data-field="email"]')?.value?.trim();
+    const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
+    const note = tr.querySelector('[data-field="note"]')?.value?.trim();
+    const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
+    // คง canView เดิมไว้ (แก้ผ่าน modal)
+    const idx = newEmps.length;
+    const oldEmp = (DB.employees||[])[idx];
+    const canView = oldEmp?.canView || [];
+    if(name) newEmps.push({name, email, brands, note, isAdmin, canView});
+  });
+  DB.employees = newEmps;
+  saveDB();
+  showToast('✅ บันทึกข้อมูลพนักงานแล้ว!');
+}
+
+// ============================================================
+// VIEW PERMISSION MODAL
+// ============================================================
+let _permEmpIdx = -1; // index ของ employee ที่กำลังแก้สิทธิ์
+
+function openViewPerm(idx){
+  _permEmpIdx = idx;
+  const emps = DB.employees||[];
+  const me = emps[idx];
+  if(!me){ showToast('❌ บันทึกพนักงานก่อนนะครับ'); return; }
+
+  const modal = document.getElementById('viewPermModal');
+  const list = document.getElementById('permCheckList');
+  const subtitle = document.getElementById('permSubtitle');
+
+  subtitle.textContent = `"${me.name}" จะเห็นงานของตัวเอง + คนที่ติ๊กด้านล่าง`;
+
+  const canView = me.canView||[];
+  list.innerHTML = emps
+    .filter((_,i)=>i!==idx) // ไม่แสดงตัวเอง
+    .map((emp,j)=>{
+      const realIdx = emps.findIndex(e=>e.name===emp.name);
+      const color = EMP_COLORS[realIdx%EMP_COLORS.length];
+      const checked = canView.includes(emp.name)?'checked':'';
+      return `<label class="perm-item">
+        <input type="checkbox" value="${emp.name}" ${checked}>
+        <span class="perm-dot" style="background:${color}"></span>
+        <span class="perm-label">${emp.name}${emp.brands?` <span style="color:var(--muted);font-size:10px;">(${emp.brands})</span>`:''}</span>
+      </label>`;
+    }).join('');
+
+  modal.classList.add('open');
+}
+
+function closeViewPerm(){
+  document.getElementById('viewPermModal').classList.remove('open');
+  _permEmpIdx = -1;
+}
+
+function saveViewPerm(){
+  if(_permEmpIdx<0) return;
+  const emps = DB.employees||[];
+  const me = emps[_permEmpIdx];
+  if(!me) return;
+  const checked = document.querySelectorAll('#permCheckList input[type=checkbox]:checked');
+  me.canView = Array.from(checked).map(cb=>cb.value);
+  saveDB();
+  showToast(`✅ บันทึกสิทธิ์ของ "${me.name}" แล้ว`);
+  closeViewPerm();
+}
+
+// ปิด modal เมื่อ click นอก box
+document.addEventListener('click', e=>{
+  const modal = document.getElementById('viewPermModal');
+  if(modal && e.target===modal) closeViewPerm();
+});
+
+// ============================================================
+// APM TASK TAB
+// ============================================================
+const APM_STATUS = [
+  {v:'not_started', label:'⏳ Not Started', cls:'s-ns'},
+  {v:'in_progress',  label:'🔄 In Progress',  cls:'s-ip'},
+  {v:'done',         label:'✅ Done',          cls:'s-done'},
+  {v:'blocked',      label:'❌ Blocked',       cls:'s-block'},
+  {v:'on_hold',      label:'🔁 On Hold',       cls:'s-hold'},
+];
+const APM_PRIORITY = ['🔴 High','🟡 Medium','🟢 Low'];
+const APM_CATEGORY = ['Content','Ads','Operations','Analytics','Customer Service','Planning','Admin','Other'];
+
+function getEmployees(){
+  return (DB.employees && DB.employees.length>0)
+    ? DB.employees
+    : [{name:'พนักงาน 1'},{name:'พนักงาน 2'},{name:'พนักงาน 3'},{name:'พนักงาน 4'},{name:'พนักงาน 5'}];
+}
+
+// หา employee object ที่ตรงกับ CURRENT_USER (ทั้ง local mode และ GAS mode)
+function getMyEmployee(){
+  if(!CURRENT_USER) return null;
+  const emps = DB.employees||[];
+  // ตรงชื่อ (local mode)
+  let found = emps.find(e=>e.name && e.name===CURRENT_USER);
+  if(found) return found;
+  // ตรง email (GAS mode)
+  found = emps.find(e=>e.email && e.email.toLowerCase()===CURRENT_USER.toLowerCase());
+  return found||null;
+}
+
+// เช็คว่า user ปัจจุบันเป็น Admin หรือเปล่า
+function isAdminUser(){
+  if(!CURRENT_USER) return true; // ถ้ายังไม่ได้เลือก user ให้เห็นทั้งหมด (local mode)
+  const me = getMyEmployee();
+  // ถ้าไม่เจอใน employee list ให้ถือว่าเป็น admin (เช่น owner ที่ไม่ได้เพิ่มไว้)
+  if(!me) return true;
+  return me.isAdmin === true;
+}
+
+// ดึงชื่อพนักงานของ user ปัจจุบัน
+function getMyEmployeeName(){
+  const me = getMyEmployee();
+  return me ? me.name : CURRENT_USER;
+}
+
+function refreshAPMSummary(){
+  const monthVal = document.getElementById('selMonth').value;
+  const mt = monthVal!=='all'
+    ? (DB.apmTasks||[]).filter(t=>!t.month||t.month===monthVal)
+    : (DB.apmTasks||[]);
+  renderAPMSummary(mt);
+}
+
+function addAPMTask(){
+  if(!DB.apmTasks) DB.apmTasks=[];
+  const monthVal = document.getElementById('selMonth').value;
+  DB.apmTasks.push({
+    id: Date.now(),
+    month: monthVal!=='all' ? monthVal : '',
+    employee:'', brand:'', task:'',
+    detail:'',
+    status:'not_started', startDate:'', due:'', note:''
+  });
+  renderAPM();
+}
+
+function deleteAPMTask(id){
+  DB.apmTasks = (DB.apmTasks||[]).filter(t=>t.id!==id);
+  renderAPM();
+}
+
+function apmUpdate(id, field, value){
+  const task = (DB.apmTasks||[]).find(t=>t.id===id);
+  if(task) task[field]=value;
+}
+
+function saveAPM(){
+  saveDB();
+  showToast('✅ บันทึก APM Task แล้ว!');
+}
+
+function renderAPMSummary(tasks){
+  const emps = getEmployees();
+  const cont = document.getElementById('apmSummary');
+  if(!cont) return;
+  cont.innerHTML = emps.map((emp,i)=>{
+    const et = tasks.filter(t=>t.employee===emp.name);
+    const total=et.length, done=et.filter(t=>t.status==='done').length;
+    const inProg=et.filter(t=>t.status==='in_progress').length;
+    const blocked=et.filter(t=>t.status==='blocked').length;
+    const pct=total>0?Math.round(done/total*100):0;
+    const color=EMP_COLORS[i%EMP_COLORS.length];
+    return `<div class="apm-emp-card">
+      <div class="apm-emp-name">
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block;"></span>
+        ${emp.name}
+      </div>
+      <div class="apm-stat-row">
+        <span>📋 <b>${total}</b> งาน</span>
+        <span style="color:#00d4aa">✅ ${done}</span>
+        <span style="color:#ffd166">🔄 ${inProg}</span>
+        ${blocked>0?`<span style="color:#ff6b6b">❌ ${blocked}</span>`:''}
+      </div>
+      <div class="apm-progress"><div class="apm-progress-bar" style="width:${pct}%;background:${color}"></div></div>
+      <div class="apm-pct"><span>ความคืบหน้า</span><span style="color:${color};font-weight:700">${pct}%</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAPM(){
+  if(!DB.apmTasks) DB.apmTasks=[];
+  const emps = getEmployees();
+  const brands = DB.brands||[];
+
+  // ===== PRIVACY: ถ้าไม่ใช่ Admin ให้เห็นแค่งานตัวเอง =====
+  const amAdmin = isAdminUser();
+  const myName = getMyEmployeeName();
+
+  // ซ่อน/แสดง employee filter ตาม role
+  const empFilter = document.getElementById('apmFilterEmp');
+  const myBadge = document.getElementById('apmMyBadge');
+  if(empFilter) empFilter.style.display = amAdmin ? '' : 'none';
+  if(myBadge){
+    if(!amAdmin && myName){
+      myBadge.style.display='';
+      myBadge.textContent='👤 งานของ: '+myName;
+    } else {
+      myBadge.style.display='none';
+    }
+  }
+
+  // populate employee filter (admin เท่านั้น)
+  if(empFilter && amAdmin){
+    const ev=empFilter.value;
+    empFilter.innerHTML='<option value="all">👤 ทุกคน</option>'+
+      emps.map(e=>`<option value="${e.name}"${ev===e.name?' selected':''}>${e.name}</option>`).join('');
+  }
+  // populate brand filter
+  const bFilter = document.getElementById('apmFilterBrand');
+  if(bFilter){
+    const bv=bFilter.value;
+    bFilter.innerHTML='<option value="all">🏷 ทุกแบรนด์</option>'+
+      brands.map(b=>`<option value="${b}"${bv===b?' selected':''}>${b}</option>`).join('');
+  }
+
+  const monthVal = document.getElementById('selMonth').value;
+  const filterEmp = (amAdmin ? empFilter?.value : myName) || 'all';
+  const filterStatus = document.getElementById('apmFilterStatus')?.value||'all';
+  const filterBrand = bFilter?.value||'all';
+
+  // summary uses all tasks for the month (no emp/status filter)
+  const monthTasks = monthVal!=='all'
+    ? DB.apmTasks.filter(t=>!t.month||t.month===monthVal)
+    : DB.apmTasks;
+  refreshAPMSummary();
+
+  // apply filters for table
+  let tasks = [...monthTasks];
+  // non-admin: เห็นงานตัวเอง + งานที่ได้รับสิทธิ์ดู
+  if(!amAdmin && myName){
+    const me = getMyEmployee();
+    const canView = me?.canView||[];
+    tasks = tasks.filter(t=>t.employee===myName || canView.includes(t.employee));
+    // ถ้ากรอง emp filter ก็ยังต้องอยู่ใน allowed list
+    if(filterEmp!=='all' && (filterEmp===myName || canView.includes(filterEmp))){
+      tasks=tasks.filter(t=>t.employee===filterEmp);
+    }
+    // อัพเดต emp filter ให้แสดงแค่ที่ดูได้
+    if(empFilter){
+      const allowed=[myName,...canView];
+      empFilter.style.display = allowed.length>1 ? '' : 'none';
+      if(allowed.length>1){
+        const ev=empFilter.value;
+        empFilter.innerHTML='<option value="all">👥 ทุกคนที่ดูได้</option>'+
+          allowed.map(n=>`<option value="${n}"${ev===n?' selected':''}>${n=== myName?'👤 '+n+' (ฉัน)':n}</option>`).join('');
+      }
+    }
+  } else if(amAdmin && filterEmp!=='all'){
+    tasks=tasks.filter(t=>t.employee===filterEmp);
+  }
+  if(filterStatus!=='all') tasks=tasks.filter(t=>t.status===filterStatus);
+  if(filterBrand!=='all')  tasks=tasks.filter(t=>t.brand===filterBrand);
+
+  const tbody=document.getElementById('apmTbody');
+  if(!tbody) return;
+
+  if(tasks.length===0){
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px;">
+      ยังไม่มีงาน — กด <b style="color:var(--accent)">+ เพิ่มงาน</b> เพื่อเริ่มต้น
+    </td></tr>`;
+
+    return;
+  }
+
+  tbody.innerHTML = tasks.map((task,i)=>{
+    const empIdx = emps.findIndex(e=>e.name===task.employee);
+    const empColor = empIdx>=0 ? EMP_COLORS[empIdx%EMP_COLORS.length] : '#8892b0';
+    const empOpts = ['<option value="">-- เลือก --</option>',...emps.map(e=>
+      `<option value="${e.name}"${task.employee===e.name?' selected':''}>${e.name}</option>`)].join('');
+    const brandOpts = ['<option value="">-- แบรนด์ --</option>',...brands.map(b=>
+      `<option value="${b}"${task.brand===b?' selected':''}>${b}</option>`)].join('');
+    const statOpts = APM_STATUS.map(s=>
+      `<option value="${s.v}"${task.status===s.v?' selected':''}>${s.label}</option>`).join('');
+    const sCls = (APM_STATUS.find(s=>s.v===task.status)||APM_STATUS[0]).cls;
+    const tid = task.id;
+    return `<tr>
+      <td class="rn">${i+1}</td>
+      <td><select class="cell left" onchange="apmUpdate(${tid},'employee',this.value);refreshAPMSummary()" style="min-width:110px;color:${empColor}">${empOpts}</select></td>
+      <td><select class="cell left" onchange="apmUpdate(${tid},'brand',this.value)" style="min-width:95px">${brandOpts}</select></td>
+      <td><input class="cell left" type="text" value="${(task.task||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'task',this.value)" placeholder="ชื่องาน / task..." style="min-width:220px"></td>
+      <td><input class="cell left" type="text" value="${(task.detail||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'detail',this.value)" placeholder="รายละเอียดงาน..." style="min-width:200px"></td>
+      <td><select class="cell left ${sCls}" onchange="apmUpdate(${tid},'status',this.value);this.className='cell left '+(APM_STATUS.find(s=>s.v===this.value)||APM_STATUS[0]).cls;refreshAPMSummary()" style="min-width:125px">${statOpts}</select></td>
+      <td><input class="cell" type="date" value="${task.startDate||''}" onchange="apmUpdate(${tid},'startDate',this.value)" style="min-width:110px"></td>
+      <td><input class="cell" type="date" value="${task.due||''}" onchange="apmUpdate(${tid},'due',this.value)" style="min-width:110px"></td>
+      <td><input class="cell left" type="text" value="${(task.note||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'note',this.value)" placeholder="หมายเหตุ..." style="min-width:180px"></td>
+      <td style="padding:4px 6px;"><button class="btn btn-danger btn-sm" onclick="deleteAPMTask(${tid})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// AUDIT LOG SYSTEM
+// ============================================================
+let CURRENT_USER = '';
+
+function setCurrentUser(name){
+  CURRENT_USER = name;
+  localStorage.setItem('ecom_user', name);
+  if(name) showToast(`✅ เข้าสู่ระบบในฐานะ ${name}`);
+  logAudit('system','','','login','','', name ? 'เข้าสู่ระบบ' : 'ออกจากระบบ');
+}
+
+function initCurrentUser(){
+  const saved = localStorage.getItem('ecom_user') || '';
+  CURRENT_USER = saved;
+  const sel = document.getElementById('selUser');
+  if(sel && saved){
+    // wait for options to be populated
+    setTimeout(()=>{ if(sel) sel.value = saved; }, 200);
+  }
+}
+
+function updateUserDropdown(){
+  const sel = document.getElementById('selUser');
+  if(!sel) return;
+  const cur = CURRENT_USER;
+  const emps = DB.employees || [];
+  sel.innerHTML = '<option value="">👤 เลือกชื่อ</option>' +
+    emps.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+
+function logAudit(platform, dataDate, brand, field, oldVal, newVal, action='แก้ไข'){
+  if(!DB.auditLog) DB.auditLog = [];
+  const entry = {
+    id: Date.now() + Math.random(), // ensure unique
+    ts: new Date().toISOString(),
+    user: CURRENT_USER || '—',
+    action,
+    platform,
+    dataDate,
+    brand,
+    field,
+    oldVal: String(oldVal||''),
+    newVal: String(newVal||'')
+  };
+  DB.auditLog.unshift(entry); // newest first
+  // Keep last 2000 entries only
+  if(DB.auditLog.length > 2000) DB.auditLog = DB.auditLog.slice(0,2000);
+}
+
+const PLAT_LABEL = {tt:'🔴 TikTok', sp:'🟠 Shopee', lz:'🟣 Lazada', system:'⚙️ System'};
+const PLAT_CLS   = {tt:'ap-tt', sp:'ap-sp', lz:'ap-lz', system:'ap-sys'};
+
+function fmtTs(iso){
+  const d = new Date(iso);
+  const pad = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function renderAudit(){
+  if(!DB.auditLog) DB.auditLog = [];
+  const log = DB.auditLog;
+
+  // --- KPI ---
+  const today = new Date().toISOString().slice(0,10);
+  const todayEntries = log.filter(e=>e.ts && e.ts.startsWith(today));
+  const editCount = log.filter(e=>e.action==='แก้ไข').length;
+  const users = [...new Set(log.map(e=>e.user).filter(u=>u&&u!=='—'))];
+  document.getElementById('auditKpi').innerHTML = [
+    {label:'รายการทั้งหมด',  val: log.length.toLocaleString(),    c:'#6c63ff'},
+    {label:'แก้ไขวันนี้',     val: todayEntries.length.toLocaleString(), c:'#ffd166'},
+    {label:'การแก้ไข (total)',val: editCount.toLocaleString(),    c:'#00d4aa'},
+    {label:'ผู้ใช้งาน',       val: users.length + ' คน',          c:'#a78bfa'},
+  ].map(k=>`<div class="kpi" style="--c:${k.c}">
+    <div class="kpi-label">${k.label}</div>
+    <div class="kpi-val">${k.val}</div>
+  </div>`).join('');
+
+  // --- Populate filter dropdowns ---
+  const uFilter = document.getElementById('auditFilterUser');
+  const bFilter = document.getElementById('auditFilterBrand');
+  if(uFilter){
+    const cv = uFilter.value;
+    uFilter.innerHTML = '<option value="all">👤 ทุกคน</option>' +
+      users.map(u=>`<option value="${u}"${cv===u?' selected':''}>${u}</option>`).join('');
+  }
+  if(bFilter){
+    const cv = bFilter.value;
+    const brands = [...new Set(log.map(e=>e.brand).filter(Boolean))];
+    bFilter.innerHTML = '<option value="all">🏷 ทุกแบรนด์</option>' +
+      brands.map(b=>`<option value="${b}"${cv===b?' selected':''}>${b}</option>`).join('');
+  }
+
+  // --- Apply filters ---
+  const fu = uFilter?.value||'all';
+  const fp = document.getElementById('auditFilterPlat')?.value||'all';
+  const fa = document.getElementById('auditFilterAction')?.value||'all';
+  const fb = bFilter?.value||'all';
+  const fs = (document.getElementById('auditSearch')?.value||'').toLowerCase();
+  const lim = parseInt(document.getElementById('auditLimit')?.value||'50');
+
+  let filtered = log.filter(e=>{
+    if(fu!=='all' && e.user!==fu) return false;
+    if(fp!=='all' && e.platform!==fp) return false;
+    if(fa!=='all' && e.action!==fa) return false;
+    if(fb!=='all' && e.brand!==fb) return false;
+    if(fs && !JSON.stringify(e).toLowerCase().includes(fs)) return false;
+    return true;
+  });
+
+  const total = filtered.length;
+  if(lim>0) filtered = filtered.slice(0,lim);
+
+  // --- Render rows ---
+  const tbody = document.getElementById('auditTbody');
+  if(!tbody) return;
+
+  tbody.innerHTML = filtered.map((e,i)=>{
+    const pc = PLAT_CLS[e.platform]||'ap-sys';
+    const pl = PLAT_LABEL[e.platform]||e.platform;
+    const actionCls = e.action==='แก้ไข'?'a-edit':e.action==='บันทึก'?'a-save':e.action==='เข้าสู่ระบบ'?'a-login':'';
+    return `<tr>
+      <td class="rn">${i+1}</td>
+      <td class="audit-ts">${fmtTs(e.ts)}</td>
+      <td style="font-weight:600;font-size:12px;padding:0 10px;">${e.user||'—'}</td>
+      <td style="padding:0 8px;"><span class="audit-plat ${pc}">${pl}</span></td>
+      <td style="padding:0 10px;font-size:11px;">${e.brand||'—'}</td>
+      <td style="padding:0 10px;font-size:11px;">${e.dataDate||'—'}</td>
+      <td style="padding:0 10px;"><span class="audit-field">${e.field||'—'}</span></td>
+      <td style="padding:0 10px;">${e.oldVal!==''?`<span class="audit-old">${e.oldVal}</span>`:'<span style="color:var(--muted);font-size:10px;">—</span>'}</td>
+      <td style="padding:0 10px;">${e.newVal!==''?`<span class="audit-new">${e.newVal}</span>`:'<span style="color:var(--muted);font-size:10px;">—</span>'}</td>
+      <td style="padding:0 10px;"><span class="${actionCls}" style="font-size:11px;font-weight:600;">${e.action||'—'}</span></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px;">
+    ยังไม่มี log — เริ่มกรอกข้อมูลเพื่อบันทึกประวัติ
+  </td></tr>`;
+
+  document.getElementById('auditCount').textContent =
+    `แสดง ${filtered.length} จาก ${total} รายการ (ทั้งหมด ${log.length} รายการ)`;
+}
+
+function confirmClearAudit(){
+  if(confirm('ต้องการล้าง Audit Log ทั้งหมดหรือไม่? ไม่สามารถกู้คืนได้')){
+    DB.auditLog = [];
+    saveDB();
+    renderAudit();
+    showToast('🗑 ล้าง Audit Log แล้ว');
+  }
+}
+
+function exportAuditCSV(){
+  const log = DB.auditLog||[];
+  const hdr = ['Timestamp','User','Platform','Brand','DataDate','Field','OldValue','NewValue','Action'];
+  const rows = log.map(e=>[e.ts,e.user,e.platform,e.brand,e.dataDate,e.field,e.oldVal,e.newVal,e.action]
+    .map(v=>'"'+(String(v||'').replace(/"/g,'""'))+'"').join(','));
+  const csv = [hdr.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download = `audit_log_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ============================================================
+// AUTO-GENERATE ROWS FOR ENTIRE MONTH (ใช้ global selMonth)
+// ============================================================
+function daysInMonth(monthVal){
+  // monthVal = "2026-04"
+  const [year, month] = monthVal.split('-').map(Number);
+  // new Date(year, month, 0) = วันสุดท้ายของเดือนนั้น
+  return new Date(year, month, 0).getDate();
+}
+
+function genMonthRows(plat){
+  const monthVal = document.getElementById('selMonth').value;
+  if(!monthVal || monthVal === 'all') return;
+
+  const currentBrand = document.getElementById('selBrand').value;
+
+  const [year, month] = monthVal.split('-').map(Number);
+  const days = daysInMonth(monthVal);
+
+  // เก็บข้อมูลที่กรอกไปแล้ว — กรองตาม brand ที่เลือก (keyed by date)
+  const existing = {};
+  const savedRows = DB[plat] || [];
+  savedRows.forEach(r => {
+    if(!r.date) return;
+    // ถ้าเลือก brand เฉพาะ ให้โหลดเฉพาะ brand นั้น
+    if(currentBrand !== 'all' && r.brand && r.brand !== currentBrand) return;
+    if(!existing[r.date]) existing[r.date] = [];
+    existing[r.date].push(r);
+  });
+
+  const tbody = document.getElementById(`tbody-${plat}`);
+  tbody.innerHTML = '';
+
+  // แสดง warning ถ้าเลือก "ทุกแบรนด์"
+  if(currentBrand === 'all'){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="30" style="text-align:center;padding:20px;color:var(--yellow);font-size:12px;">
+      ⚠️ กรุณาเลือกแบรนด์ที่ต้องการกรอกข้อมูลก่อน (ช่อง "ทุกแบรนด์" ด้านบน)
+    </td>`;
+    tbody.appendChild(tr);
+    const label = document.getElementById(`${plat}-rowcount`);
+    if(label) label.textContent = '';
+    updateBrandLabels();
+    return;
+  }
+
+  let rowIdx = 0;
+  for(let day = 1; day <= days; day++){
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const existRows = existing[dateStr];
+    if(existRows && existRows.length > 0){
+      existRows.forEach(r => renderRow(plat, r, rowIdx++));
+    } else {
+      renderRow(plat, { date: dateStr, brand: currentBrand }, rowIdx++);
+    }
+  }
+
+  // อัพเดต row count label
+  const label = document.getElementById(`${plat}-rowcount`);
+  const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  if(label) label.textContent = `${thMonths[month]} ${year+543} — ${days} วัน`;
+
+  updateBrandLabels();
+}
+
+function genAllSheetRows(){
+  ['tt','sp','lz'].forEach(plat => genMonthRows(plat));
+}
+
+// ============================================================
+// BRAND CHANGE HANDLER
+// ============================================================
+function onBrandChange(){
+  // บันทึก rows ปัจจุบันก่อนเปลี่ยน brand
+  ['tt','sp','lz'].forEach(plat => {
+    const tbody = document.getElementById('tbody-'+plat);
+    if(tbody && tbody.querySelector('tr[data-row]')) DB[plat] = getTableRows(plat);
+  });
+  saveDB();
+  // regenerate แถวใหม่ตาม brand ที่เลือก
+  genAllSheetRows();
+  refreshAll();
+}
+
+function updateBrandLabels(){
+  const b = document.getElementById('selBrand').value;
+  const brandText = b === 'all' ? '' : b;
+  const color = b === 'all' ? '#8892b0' : 'var(--accent)';
+  ['tt','sp','lz'].forEach(plat => {
+    const badge = document.getElementById(`${plat}-brand-badge`);
+    if(!badge) return;
+    if(brandText){
+      badge.innerHTML = `<span style="background:rgba(108,99,255,.18);color:var(--accent);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;border:1px solid rgba(108,99,255,.3);">🏷 ${brandText}</span>`;
+    } else {
+      badge.innerHTML = '';
+    }
+  });
+}
+
+// ============================================================
+// MONTH CHANGE HANDLER
+// ============================================================
+function onMonthChange(){
+  // sync current sheet data to DB before switching
+  ['tt','sp','lz'].forEach(plat => {
+    const tbody = document.getElementById(`tbody-${plat}`);
+    if(tbody && tbody.querySelector('tr[data-row]')) DB[plat] = getTableRows(plat);
+  });
+  saveDB();
+  genAllSheetRows();
+  refreshAll();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded',()=>{
+  // initApp() จัดการทั้ง GAS mode และ Local mode
+  initApp();
+});
+
+// Also fix the monthTasks reference inside renderAPM for the select onchange closures
+// (handled inline via re-call of renderAPMSummary with the correct scope)
+</script>
+</body>
+</html>
