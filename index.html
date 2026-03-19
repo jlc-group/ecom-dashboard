@@ -765,9 +765,13 @@ input[type=number]{-moz-appearance:textfield;}
 // CONFIG
 // ============================================================
 // ============================================================
-// GAS DETECTION — ตรวจสอบว่ารันใน Google Apps Script หรือไม่
+// MODE DETECTION — GAS / API Server / Standalone
 // ============================================================
 const IS_GAS = (typeof google !== 'undefined' && google.script != null);
+const API_BASE = window.location.origin;  // Express server base URL
+// IS_API = true when served by Express (not file://, not GAS)
+// จะถูก confirm อีกทีใน initApp() ด้วย /api/health
+let IS_API = !IS_GAS && window.location.protocol !== 'file:';
 
 const NM_TARGET = 8.5;
 const ROAS_TARGET = 3;
@@ -865,10 +869,33 @@ function initDefaults(){
 }
 
 // ============================================================
-// LOAD DB — GAS: โหลดจาก Google Sheets | Local: localStorage
+// LOAD DB — API: fetch จาก server | GAS: Google Sheets | Local: localStorage
 // ============================================================
-function loadDB(){
+async function loadDB(){
   if(IS_GAS) return; // GAS จะโหลดผ่าน initApp()
+
+  if(IS_API){
+    try {
+      const resp = await fetch(API_BASE + '/api/data');
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if(data && typeof data === 'object'){
+        DB = data;
+      }
+    } catch(e) {
+      console.error('loadDB API error:', e);
+      showToast('⚠️ โหลดจาก API ไม่ได้ — ใช้ข้อมูล local แทน');
+      // Fallback to localStorage
+      try {
+        const saved = localStorage.getItem('ecom_db');
+        if(saved) DB = JSON.parse(saved);
+      } catch(e2){}
+    }
+    initDefaults();
+    return;
+  }
+
+  // Standalone (file://) — ใช้ localStorage
   try{
     const saved = localStorage.getItem('ecom_db');
     if(saved) DB = JSON.parse(saved);
@@ -877,15 +904,44 @@ function loadDB(){
 }
 
 // ============================================================
-// SAVE DB — GAS: บันทึกไป Google Sheets | Local: localStorage
+// SAVE DB — API: PUT ไป server | GAS: Google Sheets | Local: localStorage
 // ============================================================
-function saveDB(){
+async function saveDB(){
   if(IS_GAS){
     google.script.run
       .withFailureHandler(e=>console.error('saveDB error:',e))
       .saveAllData(DB);
     return;
   }
+
+  if(IS_API){
+    try {
+      setSaveStatus('saving','⏳ กำลังบันทึก...');
+      const resp = await fetch(API_BASE + '/api/data', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': CURRENT_USER || ''
+        },
+        body: JSON.stringify(DB)
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const result = await resp.json();
+      if(result.success){
+        setSaveStatus('ok','✅ บันทึกแล้ว');
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch(e) {
+      console.error('saveDB API error:', e);
+      setSaveStatus('err','❌ บันทึกไม่ได้');
+      // Fallback: save to localStorage too
+      localStorage.setItem('ecom_db', JSON.stringify(DB));
+    }
+    return;
+  }
+
+  // Standalone
   localStorage.setItem('ecom_db', JSON.stringify(DB));
 }
 
@@ -909,12 +965,48 @@ function setSaveStatus(type, msg){
 }
 
 // ============================================================
-// INIT APP — GAS: โหลดจาก Sheets + auth | Local: localStorage
+// INIT APP — API: fetch จาก server | GAS: Sheets + auth | Local: localStorage
 // ============================================================
-function initApp(){
+async function initApp(){
+  // --- โหมด API Server ---
+  if(IS_API){
+    showLoadingOverlay(true,'กำลังเชื่อมต่อ...','กำลังตรวจสอบ API Server...');
+    // ตรวจสอบว่า API พร้อมใช้งาน
+    try {
+      const hc = await fetch(API_BASE + '/api/health');
+      if(!hc.ok) throw new Error('API not available');
+    } catch(e) {
+      console.warn('API not available, falling back to localStorage');
+      IS_API = false;
+      showLoadingOverlay(false);
+      // Fall through to standalone mode below
+    }
+  }
+  if(IS_API){
+    showLoadingOverlay(true,'กำลังโหลดข้อมูล...','กำลังเชื่อมต่อ API Server...');
+    try {
+      await loadDB();
+      initCurrentUser();
+      genAllSheetRows();
+      renderDashboard();
+      showLoadingOverlay(false);
+      setSaveStatus('ok','✅ โหลดข้อมูลจาก API แล้ว');
+      setInterval(autoSaveAPI, 120000); // autosave ทุก 2 นาที
+    } catch(e) {
+      console.error('initApp API error:', e);
+      showLoadingOverlay(false);
+      showToast('❌ โหลดข้อมูลไม่สำเร็จ: ' + (e.message||e));
+      setSaveStatus('err','❌ โหลดไม่ได้');
+      initDefaults();
+      genAllSheetRows();
+      renderDashboard();
+    }
+    return;
+  }
+
   if(!IS_GAS){
     // โหมด Standalone (ไฟล์ local)
-    loadDB();
+    await loadDB();
     genAllSheetRows();
     renderDashboard();
     setInterval(saveAll, 300000); // autosave ทุก 5 นาที
@@ -966,6 +1058,26 @@ function initApp(){
     .loadAllData();
 }
 
+async function autoSaveAPI(){
+  if(!IS_API) return;
+  ['tt','sp','lz'].forEach(plat=>{
+    const tbody=document.getElementById('tbody-'+plat);
+    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
+  });
+  try {
+    const resp = await fetch(API_BASE + '/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-User': CURRENT_USER || '' },
+      body: JSON.stringify(DB)
+    });
+    if(resp.ok) setSaveStatus('ok','✅ Auto-saved');
+    else throw new Error('HTTP ' + resp.status);
+  } catch(e) {
+    console.warn('autoSaveAPI failed:', e);
+    setSaveStatus('err','⚠️ Auto-save ล้มเหลว');
+  }
+}
+
 function autoSaveGAS(){
   if(!IS_GAS) return;
   ['tt','sp','lz'].forEach(plat=>{
@@ -978,7 +1090,7 @@ function autoSaveGAS(){
     .saveAllData(DB);
 }
 
-function saveAll(){
+async function saveAll(){
   // sync table → DB
   ['tt','sp','lz'].forEach(plat=>{
     const tbody=document.getElementById('tbody-'+plat);
@@ -1005,6 +1117,10 @@ function saveAll(){
         setSaveStatus('err','❌ Error');
       })
       .saveAllData(DB);
+  } else if(IS_API){
+    await saveDB();
+    showToast('✅ บันทึกแล้ว!');
+    refreshAll();
   } else {
     saveDB();
     showToast('✅ บันทึกแล้ว!');
@@ -2101,8 +2217,8 @@ function apmUpdate(id, field, value){
   if(task) task[field]=value;
 }
 
-function saveAPM(){
-  saveDB();
+async function saveAPM(){
+  await saveDB();
   showToast('✅ บันทึก APM Task แล้ว!');
 }
 
@@ -2252,13 +2368,14 @@ let CURRENT_USER = '';
 
 function setCurrentUser(name){
   CURRENT_USER = name;
-  localStorage.setItem('ecom_user', name);
+  try { localStorage.setItem('ecom_user', name); } catch(e){}
   if(name) showToast(`✅ เข้าสู่ระบบในฐานะ ${name}`);
   logAudit('system','','','login','','', name ? 'เข้าสู่ระบบ' : 'ออกจากระบบ');
 }
 
 function initCurrentUser(){
-  const saved = localStorage.getItem('ecom_user') || '';
+  let saved = '';
+  try { saved = localStorage.getItem('ecom_user') || ''; } catch(e){}
   CURRENT_USER = saved;
   const sel = document.getElementById('selUser');
   if(sel && saved){
