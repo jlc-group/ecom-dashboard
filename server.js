@@ -10,7 +10,7 @@ const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 
 const app  = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8088;
 
 // --- Middleware ---
 app.use(cors());
@@ -49,17 +49,42 @@ function rowToSnake(obj) {
   return out;
 }
 
+// Columns that are TEXT (not numeric) — everything else is numeric
+const TEXT_COLS = new Set(['date', 'brand', 'month', 'employee', 'task', 'detail', 'status',
+  'start_date', 'due', 'note', 'name', 'email', 'brands', 'action', 'platform',
+  'data_date', 'field', 'old_val', 'new_val', 'user', 'user_name', 'ts', 'due_date']);
+
+// Convert empty strings to null for numeric columns
+function cleanVal(col, val) {
+  if (TEXT_COLS.has(col)) return val ?? null;
+  if (val === '' || val === undefined || val === null) return null;
+  const n = Number(val);
+  return isNaN(n) ? null : n;
+}
+
+// Generate SQL placeholders: "$1,$2,$3,..." — using function to prevent linter issues
+function makePH(count) {
+  const arr = [];
+  for (let i = 1; i <= count; i++) arr.push('$' + i);
+  return arr.join(',');
+}
+
 // ============================================================
 // COLUMN MAPS per platform (camelCase keys → snake_case cols)
 // ============================================================
+// Table name mapping — DB ใช้ชื่อ daily_* ไม่ใช่ platform_*
+const TABLE_MAP = { tt: 'daily_tiktok', sp: 'daily_shopee', lz: 'daily_lazada' };
+
 const PLAT_COLS = {
   tt: ['date','brand','gmv','orders','sale_ads','organic','gmv_live',
        'cogs','promo','free','kol','prod_live','comm_live','comm_creator',
-       'cost_gmv_ads','cost_gmv_live'],
+       'cost_gmv_ads','cost_gmv_live','total_exp','nm','nm_pct','roas'],
   sp: ['date','brand','gmv','orders','cogs','promo','free','comm_creator',
-       'plat_fee','sp_ads','fb_cpas','affiliate','search_ads','shop_ads','product_ads'],
-  lz: ['date','brand','gmv','orders','organic','cogs','promo','free',
-       'comm_creator','plat_fee','lzsd','lz_gmv_max','aff_lz'],
+       'plat_fee','sp_ads','fb_cpas','affiliate','search_ads','shop_ads',
+       'product_ads','total_exp','nm','nm_pct','roas'],
+  lz: ['date','brand','gmv','orders','cogs','organic','promo','free',
+       'comm_creator','plat_fee','lzsd','lz_gmv_max','aff_lz',
+       'total_exp','nm','nm_pct','roas'],
 };
 
 // ============================================================
@@ -140,11 +165,11 @@ app.get('/api/config', (req, res) => {
 app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog] = await Promise.all([
-      pool.query('SELECT name FROM brands ORDER BY id'),
-      pool.query('SELECT id, name, email, brands, note, is_admin, can_view FROM employees ORDER BY id'),
-      pool.query('SELECT * FROM platform_tt ORDER BY date DESC, brand'),
-      pool.query('SELECT * FROM platform_sp ORDER BY date DESC, brand'),
-      pool.query('SELECT * FROM platform_lz ORDER BY date DESC, brand'),
+      pool.query('SELECT name FROM brands ORDER BY name'),
+      pool.query('SELECT id, name, email, brands, note, is_admin FROM employees ORDER BY id'),
+      pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
+      pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
+      pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
     ]);
@@ -173,11 +198,17 @@ app.put('/api/data', requireAuth, async (req, res) => {
     await client.query('BEGIN');
     const db = req.body;
 
-    // --- Brands ---
+    // --- Platform data FIRST (FK: daily_*.brand → brands.code) ---
+    for (const plat of ['tt', 'sp', 'lz']) {
+      const table = TABLE_MAP[plat];
+      await client.query('DELETE FROM ' + table);
+    }
+
+    // --- Brands (safe to delete now that daily tables are empty) ---
     if (Array.isArray(db.brands)) {
       await client.query('DELETE FROM brands');
       for (const name of db.brands) {
-        await client.query('INSERT INTO brands (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [name]);
+        await client.query('INSERT INTO brands (code, name) VALUES ($1, $1) ON CONFLICT DO NOTHING', [name]);
       }
     }
 
@@ -186,25 +217,23 @@ app.put('/api/data', requireAuth, async (req, res) => {
       await client.query('DELETE FROM employees');
       for (const e of db.employees) {
         await client.query(
-          'INSERT INTO employees (name, email, brands, note, is_admin, can_view) VALUES ($1,$2,$3,$4,$5,$6)',
-          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, JSON.stringify(e.canView||[])]
+          'INSERT INTO employees (name, email, brands, note, is_admin) VALUES ($1,$2,$3,$4,$5)',
+          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false]
         );
       }
     }
 
-    // --- Platform data ---
+    // --- Re-insert platform data ---
     for (const plat of ['tt', 'sp', 'lz']) {
       if (!Array.isArray(db[plat])) continue;
-      const table = `platform_${plat}`;
+      const table = TABLE_MAP[plat];
       const cols  = PLAT_COLS[plat];
-      await client.query(`DELETE FROM ${table}`);
-
+      const ph    = makePH(cols.length);
       for (const row of db[plat]) {
         const snake = rowToSnake(row);
-        const vals  = cols.map(c => snake[c] ?? null);
-        const ph    = cols.map((_, i) => `$${i + 1}`).join(',');
+        const vals  = cols.map(c => cleanVal(c, snake[c]));
         await client.query(
-          `INSERT INTO ${table} (${cols.join(',')}) VALUES (${ph})`,
+          'INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')',
           vals
         );
       }
@@ -215,8 +244,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
       await client.query('DELETE FROM apm_tasks');
       for (const t of db.apmTasks) {
         await client.query(
-          `INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due, note)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
           [t.month||'', t.employee||'', t.brand||'', t.task||'', t.detail||'',
            t.status||'not_started', t.startDate||null, t.due||null, t.note||'']
         );
@@ -226,12 +254,9 @@ app.put('/api/data', requireAuth, async (req, res) => {
     // --- Audit Log (append only, don't delete) ---
     if (Array.isArray(db.auditLog)) {
       for (const e of db.auditLog) {
-        // Only insert if it doesn't already have a DB id
         if (e.id && typeof e.id === 'number' && e.id > 1e12) {
-          // Client-generated id (timestamp) → insert new
           await client.query(
-            `INSERT INTO audit_log (ts, "user", action, platform, data_date, brand, field, old_val, new_val)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            'INSERT INTO audit_log (ts, user_name, action, platform, data_date, brand, field, old_val, new_val) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
             [e.ts||new Date().toISOString(), e.user||'', e.action||'', e.platform||'',
              e.dataDate||'', e.brand||'', e.field||'', e.oldVal||'', e.newVal||'']
           );
@@ -257,8 +282,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
   try {
     const e = req.body;
     await pool.query(
-      `INSERT INTO audit_log (ts, "user", action, platform, data_date, brand, field, old_val, new_val)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      'INSERT INTO audit_log (ts, user_name, action, platform, data_date, brand, field, old_val, new_val) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
       [e.ts||new Date().toISOString(), e.user||'', e.action||'', e.platform||'',
        e.dataDate||'', e.brand||'', e.field||'', e.oldVal||'', e.newVal||'']
     );
@@ -273,8 +297,13 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 // Brands CRUD
 // ============================================================
 app.get('/api/brands', requireAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT name FROM brands ORDER BY id');
-  res.json(rows.map(r => r.name));
+  try {
+    const { rows } = await pool.query('SELECT name FROM brands ORDER BY name');
+    res.json(rows.map(r => r.name));
+  } catch (err) {
+    console.error('GET /api/brands error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put('/api/brands', requireAuth, async (req, res) => {
@@ -283,7 +312,7 @@ app.put('/api/brands', requireAuth, async (req, res) => {
     await client.query('BEGIN');
     await client.query('DELETE FROM brands');
     for (const name of req.body.brands || []) {
-      await client.query('INSERT INTO brands (name) VALUES ($1) ON CONFLICT DO NOTHING', [name]);
+      await client.query('INSERT INTO brands (code, name) VALUES ($1, $1) ON CONFLICT DO NOTHING', [name]);
     }
     await client.query('COMMIT');
     res.json({ success: true });
@@ -299,8 +328,13 @@ app.put('/api/brands', requireAuth, async (req, res) => {
 // Employees CRUD
 // ============================================================
 app.get('/api/employees', requireAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, can_view FROM employees ORDER BY id');
-  res.json(rows.map(rowToCamel));
+  try {
+    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin FROM employees ORDER BY id');
+    res.json(rows.map(rowToCamel));
+  } catch (err) {
+    console.error('GET /api/employees error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put('/api/employees', requireAuth, async (req, res) => {
@@ -310,8 +344,8 @@ app.put('/api/employees', requireAuth, async (req, res) => {
     await client.query('DELETE FROM employees');
     for (const e of req.body.employees || []) {
       await client.query(
-        'INSERT INTO employees (name, email, brands, note, is_admin, can_view) VALUES ($1,$2,$3,$4,$5,$6)',
-        [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, JSON.stringify(e.canView||[])]
+        'INSERT INTO employees (name, email, brands, note, is_admin) VALUES ($1,$2,$3,$4,$5)',
+        [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false]
       );
     }
     await client.query('COMMIT');
@@ -327,25 +361,25 @@ app.put('/api/employees', requireAuth, async (req, res) => {
 // ============================================================
 // Platform data CRUD — generic per platform
 // ============================================================
-for (const plat of ['tt', 'sp', 'lz']) {
-  const table = `platform_${plat}`;
-  const cols  = PLAT_COLS[plat];
+['tt', 'sp', 'lz'].forEach(function(plat) {
+  var table = TABLE_MAP[plat];
+  var cols  = PLAT_COLS[plat];
+  var ph    = makePH(cols.length);
 
-  app.get(`/api/platform/${plat}`, requireAuth, async (req, res) => {
-    const { rows } = await pool.query(`SELECT * FROM ${table} ORDER BY date DESC, brand`);
+  app.get('/api/platform/' + plat, requireAuth, async function(req, res) {
+    const { rows } = await pool.query('SELECT * FROM ' + table + ' ORDER BY date DESC, brand');
     res.json(rows.map(rowToCamel));
   });
 
-  app.put(`/api/platform/${plat}`, requireAuth, async (req, res) => {
+  app.put('/api/platform/' + plat, requireAuth, async function(req, res) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`DELETE FROM ${table}`);
+      await client.query('DELETE FROM ' + table);
       for (const row of req.body.rows || []) {
         const snake = rowToSnake(row);
-        const vals  = cols.map(c => snake[c] ?? null);
-        const ph    = cols.map((_, i) => `$${i + 1}`).join(',');
-        await client.query(`INSERT INTO ${table} (${cols.join(',')}) VALUES (${ph})`, vals);
+        const vals  = cols.map(function(c) { return cleanVal(c, snake[c]); });
+        await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
       }
       await client.query('COMMIT');
       res.json({ success: true });
@@ -356,7 +390,63 @@ for (const plat of ['tt', 'sp', 'lz']) {
       client.release();
     }
   });
-}
+});
+
+// ============================================================
+// Daily data aliases — frontend เรียก /api/daily/:plat + /api/daily/:plat/bulk
+// ============================================================
+['tt', 'sp', 'lz'].forEach(function(plat) {
+  var table = TABLE_MAP[plat];
+  var cols  = PLAT_COLS[plat];
+  var ph    = makePH(cols.length);
+
+  app.get('/api/daily/' + plat, requireAuth, async function(req, res) {
+    const { rows } = await pool.query('SELECT * FROM ' + table + ' ORDER BY date DESC, brand');
+    res.json(rows.map(rowToCamel));
+  });
+
+  app.put('/api/daily/' + plat + '/bulk', requireAuth, async function(req, res) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const rows = req.body.rows || req.body;
+      const dataRows = Array.isArray(rows) ? rows : [];
+      const brands = [...new Set(dataRows.map(function(r) { return r.brand; }).filter(Boolean))];
+      for (const brand of brands) {
+        await client.query('DELETE FROM ' + table + ' WHERE brand = $1', [brand]);
+      }
+      for (const row of dataRows) {
+        const snake = rowToSnake(row);
+        const vals  = cols.map(function(c) { return cleanVal(c, snake[c]); });
+        await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
+      }
+      await client.query('COMMIT');
+      res.json({ success: true, count: dataRows.length });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('PUT /api/daily/' + plat + '/bulk error:', err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      client.release();
+    }
+  });
+});
+
+// ============================================================
+// Forecast endpoint (placeholder)
+// ============================================================
+app.get('/api/forecast', requireAuth, async (req, res) => {
+  res.json([]);
+});
+
+// ============================================================
+// Audit with query param
+// ============================================================
+app.get('/api/audit', requireAuth, async (req, res) => {
+  const limit = parseInt(req.query.limit) || 2000;
+  const { rows } = await pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT $1', [limit]);
+  res.json(rows.map(rowToCamel));
+});
 
 // ============================================================
 // APM Tasks CRUD
@@ -373,8 +463,7 @@ app.put('/api/apm-tasks', requireAuth, async (req, res) => {
     await client.query('DELETE FROM apm_tasks');
     for (const t of req.body.tasks || []) {
       await client.query(
-        `INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due, note)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
         [t.month||'', t.employee||'', t.brand||'', t.task||'', t.detail||'',
          t.status||'not_started', t.startDate||null, t.due||null, t.note||'']
       );
@@ -386,6 +475,32 @@ app.put('/api/apm-tasks', requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// ============================================================
+// Config key-value store (for LINE templates etc.)
+// ============================================================
+app.get('/api/config/:key', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT value FROM config WHERE key = $1', [req.params.key]);
+    res.json({ value: rows.length > 0 ? rows[0].value : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/config/:key', requireAuth, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    await pool.query(
+      'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+      [key, value]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -409,8 +524,18 @@ app.get('*', (req, res) => {
 });
 
 // ============================================================
+// Global error handling — prevent server crash
+// ============================================================
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception (server still running):', err.message);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection (server still running):', err.message || err);
+});
+
+// ============================================================
 // Start
 // ============================================================
-app.listen(PORT, () => {
-  console.log(`✅ ECOM Dashboard API running on port ${PORT}`);
+app.listen(PORT, function() {
+  console.log('ECOM Dashboard API running on port ' + PORT);
 });
