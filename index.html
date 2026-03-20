@@ -906,7 +906,7 @@ let IS_API = !IS_GAS && window.location.protocol !== 'file:';
 // ============================================================
 let AUTH_TOKEN = '';
 let GOOGLE_CLIENT_ID_CACHED = '';
-try { AUTH_TOKEN = localStorage.getItem('ecom_token') || ''; } catch(e){}
+try { AUTH_TOKEN = sessionStorage.getItem('ecom_token') || ''; } catch(e){}
 
 function authHeaders(extra){
   const h = { 'Content-Type':'application/json' };
@@ -972,9 +972,9 @@ async function handleGoogleSignIn(response){
     }
     // Approved — proceed
     AUTH_TOKEN = data.token;
-    localStorage.setItem('ecom_token', data.token);
+    sessionStorage.setItem('ecom_token', data.token);
     CURRENT_USER = data.user.name || data.user.email;
-    localStorage.setItem('ecom_user', CURRENT_USER);
+    sessionStorage.setItem('ecom_user', CURRENT_USER);
     showLoginScreen(false);
     showPendingScreen(false);
     showAuthBadge(data.user);
@@ -1008,19 +1008,21 @@ async function checkExistingSession(){
       return 'pending';
     }
     CURRENT_USER = data.user.name || data.user.email;
-    localStorage.setItem('ecom_user', CURRENT_USER);
+    sessionStorage.setItem('ecom_user', CURRENT_USER);
     showAuthBadge(data.user);
     return true;
   } catch(e){
-    localStorage.removeItem('ecom_token');
+    sessionStorage.removeItem('ecom_token');
     AUTH_TOKEN = '';
     return false;
   }
 }
 
 function handleLogout(){
-  localStorage.removeItem('ecom_token');
-  localStorage.removeItem('ecom_user');
+  try { sessionStorage.removeItem('ecom_token'); } catch(e){}
+  try { sessionStorage.removeItem('ecom_user'); } catch(e){}
+  try { localStorage.removeItem('ecom_token'); } catch(e){}
+  try { localStorage.removeItem('ecom_user'); } catch(e){}
   AUTH_TOKEN = '';
   CURRENT_USER = '';
   if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
@@ -2812,15 +2814,22 @@ let CURRENT_USER = '';
 
 function setCurrentUser(name){
   CURRENT_USER = name;
-  try { localStorage.setItem('ecom_user', name); } catch(e){}
+  try {
+    if(AUTH_TOKEN) sessionStorage.setItem('ecom_user', name);
+    else localStorage.setItem('ecom_user', name);
+  } catch(e){}
   if(name) showToast(`✅ เข้าสู่ระบบในฐานะ ${name}`);
   logAudit('system','','','login','','', name ? 'เข้าสู่ระบบ' : 'ออกจากระบบ');
 }
 
 function initCurrentUser(){
   let saved = '';
-  try { saved = localStorage.getItem('ecom_user') || ''; } catch(e){}
-  CURRENT_USER = saved;
+  if(AUTH_TOKEN){
+    saved = CURRENT_USER || '';
+  } else {
+    try { saved = localStorage.getItem('ecom_user') || ''; } catch(e){}
+    CURRENT_USER = saved;
+  }
   const sel = document.getElementById('selUser');
   if(sel && saved){
     // wait for options to be populated
