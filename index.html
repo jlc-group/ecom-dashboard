@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ECOM TEAM Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --border:#2e3350;
@@ -118,6 +119,20 @@ select.cell{padding:0 4px;cursor:pointer;}
 
 /* SAVE TOAST */
 .toast{position:fixed;bottom:20px;right:20px;background:var(--green);color:#000;border-radius:8px;padding:10px 18px;font-weight:600;font-size:12px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+
+/* LOGIN SCREEN */
+#loginScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;flex-direction:column;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;}
+.login-logo{width:60px;height:60px;background:linear-gradient(135deg,var(--accent),var(--green));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+.login-title{font-size:20px;font-weight:700;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--muted);margin-bottom:32px;}
+.login-error{color:var(--red);font-size:13px;margin-top:16px;display:none;}
+.login-divider{color:var(--muted);font-size:11px;margin:16px 0;}
+#googleSignInBtn{display:flex;justify-content:center;margin:0 auto;}
+.auth-user-badge{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;}
+.auth-user-badge .auth-name{color:var(--green);font-weight:600;}
+.btn-logout{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;}
+.btn-logout:hover{border-color:var(--red);color:var(--red);}
 .toast.show{opacity:1;}
 
 /* ลบ spinner ลูกศรขึ้น/ลงออกทั้งหมด */
@@ -245,6 +260,17 @@ input[type=number]{-moz-appearance:textfield;}
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">📊</div>
+    <div class="login-title">ECOM TEAM</div>
+    <div class="login-sub">เข้าสู่ระบบด้วย Google Account</div>
+    <div id="googleSignInBtn"></div>
+    <div id="loginError" class="login-error"></div>
+  </div>
+</div>
+
 <!-- HEADER -->
 <div class="header">
   <div class="logo">
@@ -275,6 +301,12 @@ input[type=number]{-moz-appearance:textfield;}
     </select>
     <!-- GAS mode: แสดง Google email อัตโนมัติ | Local mode: เลือกชื่อ -->
     <div id="gasUserBadge" class="user-badge" style="display:none;" title="Logged in via Google">👤 <span id="gasUserEmail">กำลังโหลด...</span></div>
+    <!-- Auth mode: แสดงชื่อ + ปุ่มออกจากระบบ -->
+    <div id="authUserBadge" class="auth-user-badge" style="display:none;">
+      <span>👤</span><span class="auth-name" id="authUserName"></span>
+      <button class="btn-logout" onclick="handleLogout()">ออกจากระบบ</button>
+    </div>
+    <!-- Fallback: เลือกชื่อ (ใช้เมื่อไม่มี Google OAuth) -->
     <select class="sel audit-user-sel" id="selUser" onchange="setCurrentUser(this.value)" title="เลือกชื่อผู้ใช้งาน">
       <option value="">👤 เลือกชื่อ</option>
     </select>
@@ -773,6 +805,131 @@ const API_BASE = window.location.origin;  // Express server base URL
 // จะถูก confirm อีกทีใน initApp() ด้วย /api/health
 let IS_API = !IS_GAS && window.location.protocol !== 'file:';
 
+// ============================================================
+// AUTH — Google OAuth + JWT Session
+// ============================================================
+let AUTH_TOKEN = '';
+let GOOGLE_CLIENT_ID_CACHED = '';
+try { AUTH_TOKEN = localStorage.getItem('ecom_token') || ''; } catch(e){}
+
+function authHeaders(extra){
+  const h = { 'Content-Type':'application/json' };
+  if(AUTH_TOKEN) h['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+  if(CURRENT_USER) h['X-User'] = CURRENT_USER;
+  if(extra) Object.assign(h, extra);
+  return h;
+}
+
+async function apiFetch(url, options){
+  options = options || {};
+  options.headers = authHeaders(options.headers);
+  const res = await fetch(url, options);
+  if(res.status === 401 && AUTH_TOKEN){
+    handleLogout();
+    showToast('⚠️ Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+async function fetchGoogleClientId(){
+  try {
+    const res = await fetch(API_BASE + '/api/config');
+    const cfg = await res.json();
+    GOOGLE_CLIENT_ID_CACHED = cfg.googleClientId || '';
+  } catch(e){ GOOGLE_CLIENT_ID_CACHED = ''; }
+}
+
+function initGoogleSignIn(){
+  if(!GOOGLE_CLIENT_ID_CACHED || typeof google === 'undefined' || !google.accounts) return;
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID_CACHED,
+    callback: handleGoogleSignIn,
+    auto_select: false,
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('googleSignInBtn'),
+    { theme:'filled_blue', size:'large', width:300, text:'signin_with', locale:'th' }
+  );
+}
+
+async function handleGoogleSignIn(response){
+  const loginError = document.getElementById('loginError');
+  loginError.style.display = 'none';
+  try {
+    const res = await fetch(API_BASE + '/api/auth/google', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      loginError.textContent = data.message || 'เข้าสู่ระบบไม่สำเร็จ';
+      loginError.style.display = 'block';
+      return;
+    }
+    AUTH_TOKEN = data.token;
+    localStorage.setItem('ecom_token', data.token);
+    CURRENT_USER = data.user.name || data.user.email;
+    localStorage.setItem('ecom_user', CURRENT_USER);
+    showLoginScreen(false);
+    showAuthBadge(data.user);
+    initApp();
+  } catch(e){
+    loginError.textContent = 'เชื่อมต่อ server ไม่ได้';
+    loginError.style.display = 'block';
+  }
+}
+
+async function checkExistingSession(){
+  if(!AUTH_TOKEN) return false;
+  try {
+    const res = await fetch(API_BASE + '/api/auth/me', {
+      headers:{'Authorization':'Bearer ' + AUTH_TOKEN}
+    });
+    if(!res.ok) throw new Error('Token invalid');
+    const data = await res.json();
+    CURRENT_USER = data.user.name || data.user.email;
+    localStorage.setItem('ecom_user', CURRENT_USER);
+    showAuthBadge(data.user);
+    return true;
+  } catch(e){
+    localStorage.removeItem('ecom_token');
+    AUTH_TOKEN = '';
+    return false;
+  }
+}
+
+function handleLogout(){
+  localStorage.removeItem('ecom_token');
+  localStorage.removeItem('ecom_user');
+  AUTH_TOKEN = '';
+  CURRENT_USER = '';
+  if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+    google.accounts.id.disableAutoSelect();
+  }
+  showLoginScreen(true);
+  // Hide auth badge, show dropdown
+  const badge = document.getElementById('authUserBadge');
+  const sel = document.getElementById('selUser');
+  if(badge) badge.style.display = 'none';
+  if(sel) sel.style.display = '';
+}
+
+function showLoginScreen(show){
+  const el = document.getElementById('loginScreen');
+  if(el) el.style.display = show ? 'flex' : 'none';
+}
+
+function showAuthBadge(user){
+  const badge = document.getElementById('authUserBadge');
+  const nameEl = document.getElementById('authUserName');
+  const sel = document.getElementById('selUser');
+  if(badge) badge.style.display = 'flex';
+  if(nameEl) nameEl.textContent = user.name || user.email;
+  if(sel) sel.style.display = 'none';
+}
+
 const NM_TARGET = 8.5;
 const ROAS_TARGET = 3;
 const BRAND_COLORS = ['#6c63ff','#00d4aa','#ff6b6b','#ffd166','#a78bfa','#60a5fa'];
@@ -876,7 +1033,7 @@ async function loadDB(){
 
   if(IS_API){
     try {
-      const resp = await fetch(API_BASE + '/api/data');
+      const resp = await apiFetch(API_BASE + '/api/data');
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
       if(data && typeof data === 'object'){
@@ -917,12 +1074,8 @@ async function saveDB(){
   if(IS_API){
     try {
       setSaveStatus('saving','⏳ กำลังบันทึก...');
-      const resp = await fetch(API_BASE + '/api/data', {
+      const resp = await apiFetch(API_BASE + '/api/data', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User': CURRENT_USER || ''
-        },
         body: JSON.stringify(DB)
       });
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -1065,9 +1218,8 @@ async function autoSaveAPI(){
     if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
   });
   try {
-    const resp = await fetch(API_BASE + '/api/data', {
+    const resp = await apiFetch(API_BASE + '/api/data', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-User': CURRENT_USER || '' },
       body: JSON.stringify(DB)
     });
     if(resp.ok) setSaveStatus('ok','✅ Auto-saved');
@@ -2641,9 +2793,37 @@ function onMonthChange(){
 // ============================================================
 // INIT
 // ============================================================
-document.addEventListener('DOMContentLoaded',()=>{
-  // initApp() จัดการทั้ง GAS mode และ Local mode
-  initApp();
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(IS_GAS){
+    showLoginScreen(false);
+    initApp();
+    return;
+  }
+
+  // Fetch Google Client ID from server
+  await fetchGoogleClientId();
+
+  if(GOOGLE_CLIENT_ID_CACHED){
+    // Google OAuth mode — check existing session first
+    const hasSession = await checkExistingSession();
+    if(hasSession){
+      showLoginScreen(false);
+      initApp();
+    } else {
+      showLoginScreen(true);
+      // Wait for GIS library to load then render button
+      const waitGIS = setInterval(()=>{
+        if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+          clearInterval(waitGIS);
+          initGoogleSignIn();
+        }
+      }, 100);
+    }
+  } else {
+    // No Google OAuth configured — skip login, use old dropdown mode
+    showLoginScreen(false);
+    initApp();
+  }
 });
 
 // Also fix the monthTasks reference inside renderAPM for the select onchange closures

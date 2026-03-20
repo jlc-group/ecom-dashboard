@@ -6,6 +6,8 @@ const express = require('express');
 const cors    = require('cors');
 const { Pool } = require('pg');
 const path    = require('path');
+const { OAuth2Client } = require('google-auth-library');
+const jwt = require('jsonwebtoken');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +22,11 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
+
+// --- Google OAuth ---
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 // ============================================================
 // HELPER: camelCase ↔ snake_case
@@ -56,13 +63,85 @@ const PLAT_COLS = {
 };
 
 // ============================================================
+// AUTH: Middleware & Endpoints
+// ============================================================
+function requireAuth(req, res, next) {
+  if (!GOOGLE_CLIENT_ID) return next(); // skip auth if not configured
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'NO_TOKEN' });
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'INVALID_TOKEN' });
+  }
+}
+
+// POST /api/auth/google — verify Google ID token, return JWT
+app.post('/api/auth/google', async (req, res) => {
+  if (!googleClient) {
+    return res.status(500).json({ error: 'GOOGLE_CLIENT_ID not configured' });
+  }
+  try {
+    const { credential } = req.body;
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = payload.email;
+
+    const { rows } = await pool.query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]
+    );
+    if (rows.length === 0) {
+      return res.status(403).json({
+        error: 'NOT_FOUND',
+        message: 'ไม่พบ email นี้ในระบบ กรุณาติดต่อ Admin'
+      });
+    }
+    const emp = rowToCamel(rows[0]);
+    const token = jwt.sign(
+      { sub: emp.id, email: emp.email, name: emp.name, isAdmin: emp.isAdmin },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    res.json({ token, user: emp });
+  } catch (err) {
+    console.error('Auth error:', err);
+    res.status(401).json({ error: 'AUTH_FAILED', message: 'การยืนยันตัวตนล้มเหลว' });
+  }
+});
+
+// GET /api/auth/me — verify JWT, return user info
+app.get('/api/auth/me', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'NO_TOKEN' });
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { rows } = await pool.query('SELECT * FROM employees WHERE id = $1', [decoded.sub]);
+    if (rows.length === 0) return res.status(401).json({ error: 'USER_NOT_FOUND' });
+    res.json({ user: rowToCamel(rows[0]) });
+  } catch (err) {
+    res.status(401).json({ error: 'INVALID_TOKEN' });
+  }
+});
+
+// GET /api/config — return public config (Google Client ID)
+app.get('/api/config', (req, res) => {
+  res.json({ googleClientId: GOOGLE_CLIENT_ID });
+});
+
+// ============================================================
 // GET /api/data — Load entire DB (mimics the old loadDB)
 // ============================================================
-app.get('/api/data', async (req, res) => {
+app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog] = await Promise.all([
       pool.query('SELECT name FROM brands ORDER BY id'),
-      pool.query('SELECT id, name, brands, note FROM employees ORDER BY id'),
+      pool.query('SELECT id, name, email, brands, note, is_admin, can_view FROM employees ORDER BY id'),
       pool.query('SELECT * FROM platform_tt ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM platform_sp ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM platform_lz ORDER BY date DESC, brand'),
@@ -88,7 +167,7 @@ app.get('/api/data', async (req, res) => {
 // ============================================================
 // PUT /api/data — Save entire DB (mimics the old saveDB)
 // ============================================================
-app.put('/api/data', async (req, res) => {
+app.put('/api/data', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -107,8 +186,8 @@ app.put('/api/data', async (req, res) => {
       await client.query('DELETE FROM employees');
       for (const e of db.employees) {
         await client.query(
-          'INSERT INTO employees (name, brands, note) VALUES ($1, $2, $3)',
-          [e.name || '', e.brands || '', e.note || '']
+          'INSERT INTO employees (name, email, brands, note, is_admin, can_view) VALUES ($1,$2,$3,$4,$5,$6)',
+          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, JSON.stringify(e.canView||[])]
         );
       }
     }
@@ -174,7 +253,7 @@ app.put('/api/data', async (req, res) => {
 // ============================================================
 // POST /api/audit — Append single audit entry
 // ============================================================
-app.post('/api/audit', async (req, res) => {
+app.post('/api/audit', requireAuth, async (req, res) => {
   try {
     const e = req.body;
     await pool.query(
@@ -193,12 +272,12 @@ app.post('/api/audit', async (req, res) => {
 // ============================================================
 // Brands CRUD
 // ============================================================
-app.get('/api/brands', async (req, res) => {
+app.get('/api/brands', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT name FROM brands ORDER BY id');
   res.json(rows.map(r => r.name));
 });
 
-app.put('/api/brands', async (req, res) => {
+app.put('/api/brands', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -219,19 +298,21 @@ app.put('/api/brands', async (req, res) => {
 // ============================================================
 // Employees CRUD
 // ============================================================
-app.get('/api/employees', async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, brands, note FROM employees ORDER BY id');
+app.get('/api/employees', requireAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, can_view FROM employees ORDER BY id');
   res.json(rows.map(rowToCamel));
 });
 
-app.put('/api/employees', async (req, res) => {
+app.put('/api/employees', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM employees');
     for (const e of req.body.employees || []) {
-      await client.query('INSERT INTO employees (name, brands, note) VALUES ($1,$2,$3)',
-        [e.name||'', e.brands||'', e.note||'']);
+      await client.query(
+        'INSERT INTO employees (name, email, brands, note, is_admin, can_view) VALUES ($1,$2,$3,$4,$5,$6)',
+        [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, JSON.stringify(e.canView||[])]
+      );
     }
     await client.query('COMMIT');
     res.json({ success: true });
@@ -250,12 +331,12 @@ for (const plat of ['tt', 'sp', 'lz']) {
   const table = `platform_${plat}`;
   const cols  = PLAT_COLS[plat];
 
-  app.get(`/api/platform/${plat}`, async (req, res) => {
+  app.get(`/api/platform/${plat}`, requireAuth, async (req, res) => {
     const { rows } = await pool.query(`SELECT * FROM ${table} ORDER BY date DESC, brand`);
     res.json(rows.map(rowToCamel));
   });
 
-  app.put(`/api/platform/${plat}`, async (req, res) => {
+  app.put(`/api/platform/${plat}`, requireAuth, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -280,12 +361,12 @@ for (const plat of ['tt', 'sp', 'lz']) {
 // ============================================================
 // APM Tasks CRUD
 // ============================================================
-app.get('/api/apm-tasks', async (req, res) => {
+app.get('/api/apm-tasks', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM apm_tasks ORDER BY id DESC');
   res.json(rows.map(rowToCamel));
 });
 
-app.put('/api/apm-tasks', async (req, res) => {
+app.put('/api/apm-tasks', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

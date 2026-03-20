@@ -10,10 +10,13 @@ CREATE TABLE IF NOT EXISTS brands (
 
 -- Employees
 CREATE TABLE IF NOT EXISTS employees (
-  id     SERIAL PRIMARY KEY,
-  name   VARCHAR(100) NOT NULL,
-  brands TEXT DEFAULT '',
-  note   TEXT DEFAULT ''
+  id        SERIAL PRIMARY KEY,
+  name      VARCHAR(100) NOT NULL,
+  email     VARCHAR(200) DEFAULT '',
+  brands    TEXT DEFAULT '',
+  note      TEXT DEFAULT '',
+  is_admin  BOOLEAN DEFAULT false,
+  can_view  TEXT DEFAULT '[]'
 );
 
 -- Platform data — TikTok
@@ -117,6 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_sp_date_brand   ON platform_sp(date, brand);
 CREATE INDEX IF NOT EXISTS idx_lz_date_brand   ON platform_lz(date, brand);
 CREATE INDEX IF NOT EXISTS idx_apm_month       ON apm_tasks(month);
 CREATE INDEX IF NOT EXISTS idx_audit_ts        ON audit_log(ts DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_email ON employees(email) WHERE email != '';
 
 -- Default brands
 INSERT INTO brands (name) VALUES
