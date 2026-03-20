@@ -376,9 +376,9 @@ input[type=number]{-moz-appearance:textfield;}
         <tbody>
           <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
           <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
-          <tr><td>เวลาส่ง</td><td>09:00</td><td style="font-size:11px;color:var(--muted)">ตั้ง Trigger ใน Apps Script</td></tr>
-          <tr><td>ส่งสรุปรวม</td><td><span class="pill pill-g">YES</span></td><td></td></tr>
-          <tr><td>ส่งแยกแบรนด์</td><td><span class="pill pill-g">YES</span></td><td></td></tr>
+          <tr><td>เวลาส่ง</td><td><input id="lineSendTime" type="time" class="cell" style="width:120px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" value="09:00"></td><td style="font-size:11px;color:var(--muted)">ตั้ง Trigger ใน Apps Script</td></tr>
+          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
         </tbody>
       </table>
     </div>
