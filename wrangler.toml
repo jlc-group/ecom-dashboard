@@ -1,0 +1,10 @@
+name = "ecom-dashboard"
+compatibility_date = "2024-01-15"
+
+[site]
+bucket = "."
+
+# Cloudflare Pages Functions configuration
+pages_build_output_dir = "."
+
+# ไม่ต้องมี [env.production.vars] เพราะเป็น static HTML ไม่มี API keys

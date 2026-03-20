@@ -1,0 +1,7 @@
+tunnel: 4d48b950-0a4b-4382-8698-6acc6735c9ff
+credentials-file: C:\Users\%USERNAME%\.cloudflared\4d48b950-0a4b-4382-8698-6acc6735c9ff.json
+
+ingress:
+  - hostname: ba8699e1-13a7-4ea8-8344-3db19ebb8bbe.cfargotunnel.com
+    service: http://localhost:8088
+  - service: http_status:404
