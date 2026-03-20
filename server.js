@@ -446,6 +446,15 @@ app.put('/api/data', requireAuth, async (req, res) => {
       }
     }
 
+    // --- Forecast GMV (store as JSON in config) ---
+    if (db.forecastGMV && typeof db.forecastGMV === 'object') {
+      const fcJson = JSON.stringify(db.forecastGMV);
+      await client.query(
+        "INSERT INTO config (key, value) VALUES ('forecast_gmv_json', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        [fcJson]
+      );
+    }
+
     await client.query('COMMIT');
     res.json({ success: true, savedBy: req.headers['x-user'] || '' });
   } catch (err) {
