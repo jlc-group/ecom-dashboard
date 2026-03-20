@@ -268,7 +268,7 @@ app.get('/api/config', (req, res) => {
 // ============================================================
 app.get('/api/data', requireAuth, async (req, res) => {
   try {
-    const [brands, employees, tt, sp, lz, apmTasks, auditLog] = await Promise.all([
+    const [brands, employees, tt, sp, lz, apmTasks, auditLog, fcRow] = await Promise.all([
       pool.query('SELECT name FROM brands ORDER BY name'),
       pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
@@ -276,16 +276,23 @@ app.get('/api/data', requireAuth, async (req, res) => {
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
+      pool.query("SELECT value FROM config WHERE key = 'forecast_gmv_json' LIMIT 1"),
     ]);
 
+    let forecastGMV = {};
+    if (fcRow.rows.length > 0) {
+      try { forecastGMV = JSON.parse(fcRow.rows[0].value); } catch(e) {}
+    }
+
     res.json({
-      brands:    brands.rows.map(r => r.name),
-      employees: employees.rows.map(rowToCamel),
-      tt:        tt.rows.map(rowToCamel),
-      sp:        sp.rows.map(rowToCamel),
-      lz:        lz.rows.map(rowToCamel),
-      apmTasks:  apmTasks.rows.map(rowToCamel),
-      auditLog:  auditLog.rows.map(rowToCamel),
+      brands:      brands.rows.map(r => r.name),
+      employees:   employees.rows.map(rowToCamel),
+      tt:          tt.rows.map(rowToCamel),
+      sp:          sp.rows.map(rowToCamel),
+      lz:          lz.rows.map(rowToCamel),
+      apmTasks:    apmTasks.rows.map(rowToCamel),
+      auditLog:    auditLog.rows.map(rowToCamel),
+      forecastGMV: forecastGMV,
     });
   } catch (err) {
     console.error('GET /api/data error:', err);
@@ -383,6 +390,15 @@ app.put('/api/data', requireAuth, async (req, res) => {
           );
         }
       }
+    }
+
+    // --- Forecast GMV (store as JSON in config) ---
+    if (db.forecastGMV && typeof db.forecastGMV === 'object') {
+      const fcJson = JSON.stringify(db.forecastGMV);
+      await client.query(
+        "INSERT INTO config (key, value) VALUES ('forecast_gmv_json', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        [fcJson]
+      );
     }
 
     await client.query('COMMIT');
