@@ -4,7 +4,7 @@ color 0A
 
 echo =============================================
 echo   Cloudflare Tunnel - ecom-dashboard
-echo   ecom-dashboard.wejlc.com -> localhost:8080
+echo   ecom-dashboard.wejlc.com -> localhost:8088
 echo   Protocol: HTTP/2 (Stable)
 echo   Press Ctrl+C to stop
 echo =============================================
