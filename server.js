@@ -27,6 +27,8 @@ const pool = new Pool({
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+// true = Sign-in ด้วย Google แล้วใช้งานได้ทันที ไม่ต้องรอ Admin อนุมัติ (รวมถึงคนที่ค้าง pending เดิม)
+const AUTO_APPROVE_USERS = process.env.AUTO_APPROVE_USERS === 'true';
 
 // ============================================================
 // HELPER: camelCase ↔ snake_case
@@ -91,6 +93,20 @@ const PLAT_COLS = {
 // ============================================================
 // AUTH: Middleware & Endpoints
 // ============================================================
+async function issueJwtForEmployee(res, employeeId) {
+  const freshRow = await pool.query('SELECT * FROM employees WHERE id = $1', [employeeId]);
+  if (freshRow.rows.length === 0) {
+    return res.status(500).json({ error: 'USER_NOT_FOUND' });
+  }
+  const freshEmp = rowToCamel(freshRow.rows[0]);
+  const token = jwt.sign(
+    { sub: freshEmp.id, email: freshEmp.email, name: freshEmp.name, isAdmin: freshEmp.isAdmin, visibleTabs: freshEmp.visible_tabs || '' },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+  res.json({ status: 'approved', token: token, user: freshEmp });
+}
+
 function requireAuth(req, res, next) {
   if (!GOOGLE_CLIENT_ID) return next(); // skip auth if not configured
   const authHeader = req.headers.authorization;
@@ -129,17 +145,22 @@ app.post('/api/auth/google', async (req, res) => {
 
     var emp;
     if (result.rows.length === 0) {
-      // Auto-register: create new user with status='pending'
+      var newStatus = AUTO_APPROVE_USERS ? 'approved' : 'pending';
       var insertResult = await pool.query(
-        'INSERT INTO employees (name, email, google_id, picture, status, is_admin) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-        [name, email, googleId, picture, 'pending', false]
+        'INSERT INTO employees (name, email, google_id, picture, status, is_admin) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        [name, email, googleId, picture, newStatus, false]
       );
-      emp = rowToCamel(insertResult.rows[0]);
-      return res.json({
-        status: 'pending',
-        message: 'ลงทะเบียนสำเร็จ! กรุณารอ Admin อนุมัติ',
-        user: { name: emp.name, email: emp.email, picture: emp.picture, status: 'pending' }
-      });
+      var newId = insertResult.rows[0].id;
+      if (!AUTO_APPROVE_USERS) {
+        var rowNew = await pool.query('SELECT * FROM employees WHERE id = $1', [newId]);
+        emp = rowToCamel(rowNew.rows[0]);
+        return res.json({
+          status: 'pending',
+          message: 'ลงทะเบียนสำเร็จ! กรุณารอ Admin อนุมัติ',
+          user: { name: emp.name, email: emp.email, picture: emp.picture, status: 'pending' }
+        });
+      }
+      return issueJwtForEmployee(res, newId);
     }
 
     // User exists — update google_id and picture if needed
@@ -154,6 +175,10 @@ app.post('/api/auth/google', async (req, res) => {
 
     // Check approval status
     if (emp.status === 'pending') {
+      if (AUTO_APPROVE_USERS) {
+        await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['approved', emp.id]);
+        return issueJwtForEmployee(res, emp.id);
+      }
       return res.json({
         status: 'pending',
         message: 'บัญชีของคุณกำลังรอ Admin อนุมัติ',
@@ -168,15 +193,7 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     // Approved — issue JWT
-    var token = jwt.sign(
-      { sub: emp.id, email: emp.email, name: emp.name, isAdmin: emp.isAdmin, visibleTabs: emp.visible_tabs || '' },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-    // Re-read with visible_tabs
-    var freshRow = await pool.query('SELECT * FROM employees WHERE id = $1', [emp.id]);
-    var freshEmp = rowToCamel(freshRow.rows[0]);
-    res.json({ status: 'approved', token: token, user: freshEmp });
+    return issueJwtForEmployee(res, emp.id);
   } catch (err) {
     console.error('Auth error:', err);
     res.status(401).json({ error: 'AUTH_FAILED', message: 'การยืนยันตัวตนล้มเหลว' });
