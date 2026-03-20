@@ -1934,9 +1934,10 @@ function renderConfig(){
       <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
     tbody.appendChild(tr);
   });
-  // fill lineToken/lineGroup
+  // fill lineToken/lineGroup/lineSendTime
   if(document.getElementById('lineToken')) document.getElementById('lineToken').value = DB.lineToken||'';
   if(document.getElementById('lineGroup')) document.getElementById('lineGroup').value = DB.lineGroup||'';
+  if(document.getElementById('lineSendTime')) document.getElementById('lineSendTime').value = DB.lineSendTime||'09:00';
   // Render employee config
   renderEmpConfig();
 }
@@ -1968,6 +1969,7 @@ function saveBrandConfig(){
   DB.brandNames = names;
   DB.lineToken = document.getElementById('lineToken')?.value||'';
   DB.lineGroup = document.getElementById('lineGroup')?.value||'';
+  DB.lineSendTime = document.getElementById('lineSendTime')?.value||'09:00';
   BRANDS.length=0; newBrands.forEach(b=>BRANDS.push(b));
   saveDB(); updateBrandDropdowns();
   showToast('✅ บันทึก Config แล้ว!');

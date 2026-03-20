@@ -268,24 +268,51 @@ app.get('/api/config', (req, res) => {
 // ============================================================
 app.get('/api/data', requireAuth, async (req, res) => {
   try {
-    const [brands, employees, tt, sp, lz, apmTasks, auditLog] = await Promise.all([
-      pool.query('SELECT name FROM brands ORDER BY name'),
+    const [brands, employees, tt, sp, lz, apmTasks, auditLog, forecast, configRows] = await Promise.all([
+      pool.query('SELECT code, name, target_nm FROM brands ORDER BY name'),
       pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
+      pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index'),
+      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time')"),
     ]);
 
+    // Build brandTargets & brandNames from brands table
+    var brandTargets = {};
+    var brandNames = {};
+    brands.rows.forEach(function(r){
+      brandTargets[r.code] = { nm: r.target_nm != null ? parseFloat(r.target_nm) : 8.5 };
+      brandNames[r.code] = r.name || r.code;
+    });
+
+    // Build forecastGMV from forecast table
+    var forecastGMV = {};
+    forecast.rows.forEach(function(r){
+      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {tt:Array(12).fill(0), sp:Array(12).fill(0), lz:Array(12).fill(0)};
+      if(forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
+    });
+
+    // Build LINE config from config table
+    var configMap = {};
+    configRows.rows.forEach(function(r){ configMap[r.key] = r.value; });
+
     res.json({
-      brands:    brands.rows.map(r => r.name),
-      employees: employees.rows.map(rowToCamel),
-      tt:        tt.rows.map(rowToCamel),
-      sp:        sp.rows.map(rowToCamel),
-      lz:        lz.rows.map(rowToCamel),
-      apmTasks:  apmTasks.rows.map(rowToCamel),
-      auditLog:  auditLog.rows.map(rowToCamel),
+      brands:       brands.rows.map(r => r.code),
+      brandTargets: brandTargets,
+      brandNames:   brandNames,
+      employees:    employees.rows.map(rowToCamel),
+      tt:           tt.rows.map(rowToCamel),
+      sp:           sp.rows.map(rowToCamel),
+      lz:           lz.rows.map(rowToCamel),
+      apmTasks:     apmTasks.rows.map(rowToCamel),
+      auditLog:     auditLog.rows.map(rowToCamel),
+      forecastGMV:  forecastGMV,
+      lineToken:    configMap['line_token'] || '',
+      lineGroup:    configMap['line_group'] || '',
+      lineSendTime: configMap['line_send_time'] || '09:00',
     });
   } catch (err) {
     console.error('GET /api/data error:', err);
@@ -311,9 +338,43 @@ app.put('/api/data', requireAuth, async (req, res) => {
     // --- Brands (safe to delete now that daily tables are empty) ---
     if (Array.isArray(db.brands)) {
       await client.query('DELETE FROM brands');
-      for (const name of db.brands) {
-        await client.query('INSERT INTO brands (code, name) VALUES ($1, $1) ON CONFLICT DO NOTHING', [name]);
+      for (var bi = 0; bi < db.brands.length; bi++) {
+        var bCode = db.brands[bi];
+        var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
+        var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
+        await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [bCode, bName, bTarget]);
       }
+    }
+
+    // --- Forecast GMV ---
+    if (db.forecastGMV && typeof db.forecastGMV === 'object') {
+      await client.query('DELETE FROM forecast');
+      var fcBrands = Object.keys(db.forecastGMV);
+      for (var fi = 0; fi < fcBrands.length; fi++) {
+        var fcBrand = fcBrands[fi];
+        var fcPlats = ['tt','sp','lz'];
+        for (var pi = 0; pi < fcPlats.length; pi++) {
+          var fcPlat = fcPlats[pi];
+          var vals = db.forecastGMV[fcBrand][fcPlat];
+          if (!Array.isArray(vals)) continue;
+          for (var mi = 0; mi < vals.length; mi++) {
+            if (vals[mi]) {
+              await client.query('INSERT INTO forecast (brand, platform, month_index, value) VALUES ($1,$2,$3,$4)', [fcBrand, fcPlat, mi, vals[mi]]);
+            }
+          }
+        }
+      }
+    }
+
+    // --- LINE Config ---
+    if (db.lineToken !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_token', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineToken || '']);
+    }
+    if (db.lineGroup !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_group', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineGroup || '']);
+    }
+    if (db.lineSendTime !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSendTime || '09:00']);
     }
 
     // --- Employees (preserve google_id, status, picture) ---
@@ -419,8 +480,8 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 // ============================================================
 app.get('/api/brands', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT name FROM brands ORDER BY name');
-    res.json(rows.map(r => r.name));
+    const { rows } = await pool.query('SELECT code, name, target_nm FROM brands ORDER BY name');
+    res.json(rows.map(r => ({ code: r.code, name: r.name, targetNm: r.target_nm })));
   } catch (err) {
     console.error('GET /api/brands error:', err.message);
     res.status(500).json({ error: err.message });
@@ -432,8 +493,14 @@ app.put('/api/brands', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM brands');
-    for (const name of req.body.brands || []) {
-      await client.query('INSERT INTO brands (code, name) VALUES ($1, $1) ON CONFLICT DO NOTHING', [name]);
+    var brandList = req.body.brands || [];
+    var targets = req.body.brandTargets || {};
+    var names = req.body.brandNames || {};
+    for (var i = 0; i < brandList.length; i++) {
+      var code = brandList[i];
+      var nm = (targets[code] && targets[code].nm != null) ? targets[code].nm : 8.5;
+      var bname = names[code] || code;
+      await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [code, bname, nm]);
     }
     await client.query('COMMIT');
     res.json({ success: true });
@@ -580,10 +647,51 @@ app.put('/api/employees', requireAuth, async (req, res) => {
 });
 
 // ============================================================
-// Forecast endpoint (placeholder)
+// Forecast CRUD
 // ============================================================
 app.get('/api/forecast', requireAuth, async (req, res) => {
-  res.json([]);
+  try {
+    var { rows } = await pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index');
+    var forecastGMV = {};
+    rows.forEach(function(r){
+      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {tt:Array(12).fill(0), sp:Array(12).fill(0), lz:Array(12).fill(0)};
+      if(forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
+    });
+    res.json(forecastGMV);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/forecast', requireAuth, async (req, res) => {
+  var client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM forecast');
+    var data = req.body.forecastGMV || req.body;
+    var fcBrands = Object.keys(data);
+    for (var fi = 0; fi < fcBrands.length; fi++) {
+      var brand = fcBrands[fi];
+      var plats = ['tt','sp','lz'];
+      for (var pi = 0; pi < plats.length; pi++) {
+        var plat = plats[pi];
+        var vals = data[brand][plat];
+        if (!Array.isArray(vals)) continue;
+        for (var mi = 0; mi < vals.length; mi++) {
+          if (vals[mi]) {
+            await client.query('INSERT INTO forecast (brand, platform, month_index, value) VALUES ($1,$2,$3,$4)', [brand, plat, mi, vals[mi]]);
+          }
+        }
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ============================================================
