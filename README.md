@@ -1,6 +1,10 @@
 # ecom-dashboard
 ECOM TEAM Dashboard - E-commerce data management
 
+## 👥 ทีมอื่นนำไปพัฒนาต่อ
+
+อ่าน **[docs/TEAM-ONBOARDING.md](./docs/TEAM-ONBOARDING.md)** — ตั้งค่า `.env`, PostgreSQL, พอร์ต **8088** ให้ตรงกับ **Cloudflare Tunnel** และวิธีรัน `cloudflared` ให้สอดคล้องกันทั้งทีม
+
 ## 🚀 Quick Start
 
 ### Development (Local)
@@ -25,11 +29,14 @@ npm run dev
 
 ```
 ecom-dashboard/
-├── index.html          # Main HTML file
-├── server.js           # Express API + static
-├── schema.sql          # DB schema
-├── config.yml          # Cloudflare Tunnel (optional)
-├── wrangler.toml       # Cloudflare Pages (optional)
+├── docs/
+│   └── TEAM-ONBOARDING.md   # คู่มือทีมพัฒนา + Tunnel/DB
+├── index.html
+├── server.js
+├── schema.sql
+├── config.yml               # Tunnel จริง (ไม่ใส่ secret ใน Git นอกจากที่ทีมยอมรับ)
+├── config.example.yml       # แม่แบบ Tunnel
+├── wrangler.toml
 ├── cloudflare-tunnel.bat
 └── package.json
 ```
