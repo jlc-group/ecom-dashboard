@@ -50,3 +50,5 @@ ecom-dashboard/
 
 ### Cloudflare Pages (`wrangler.toml`)
 - ใช้เฉพาะกรณี deploy static แยก — production หลักผ่าน PM2 + tunnel ไปที่พอร์ตด้านบน
+
+
