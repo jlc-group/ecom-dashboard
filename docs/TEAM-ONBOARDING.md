@@ -38,19 +38,16 @@ cp .env.example .env
 
 ### 3.2 สร้าง schema (ครั้งแรก)
 
-บน Linux/macOS:
+**แนะนำ (ตรงกับ `server.js` ปัจจุบัน — ตาราง `daily_*`, `brands.code`):**
 
 ```bash
-npm run db:init
+# ตั้ง ADMIN_URL (postgres ที่มีสิทธิ์สร้าง DB) และชื่อ DB ถ้าต้องการ
+npm run init-db
 ```
 
-บน Windows (PowerShell) ถ้า `npm run db:init` ไม่ทำงาน ใช้:
+สคริปต์ `scripts/init-production-db.js` จะสร้าง database `ecom_dashboard` (ถ้ายังไม่มี) + ตารางทั้งหมด
 
-```powershell
-psql $env:DATABASE_URL -f schema.sql
-```
-
-หรือเปิด `schema.sql` รันใน client ที่เชื่อม DB ได้
+ทางเลือกเดิม: `schema.sql` + `psql` (อาจไม่ตรงกับชื่อตารางใน `server.js` ถ้า repoยังมี schema เก่า)
 
 ---
 

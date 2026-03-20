@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "db:init": "psql $DATABASE_URL -f schema.sql"
+    "db:init": "psql $DATABASE_URL -f schema.sql",
+    "init-db": "node scripts/init-production-db.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
