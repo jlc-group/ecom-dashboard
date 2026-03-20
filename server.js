@@ -52,7 +52,8 @@ function rowToSnake(obj) {
 // Columns that are TEXT (not numeric) — everything else is numeric
 const TEXT_COLS = new Set(['date', 'brand', 'month', 'employee', 'task', 'detail', 'status',
   'start_date', 'due', 'note', 'name', 'email', 'brands', 'action', 'platform',
-  'data_date', 'field', 'old_val', 'new_val', 'user', 'user_name', 'ts', 'due_date']);
+  'data_date', 'field', 'old_val', 'new_val', 'user', 'user_name', 'ts', 'due_date',
+  'google_id', 'picture', 'visible_tabs']);
 
 // Convert empty strings to null for numeric columns
 function cleanVal(col, val) {
@@ -103,39 +104,142 @@ function requireAuth(req, res, next) {
   }
 }
 
-// POST /api/auth/google — verify Google ID token, return JWT
+// POST /api/auth/google — verify Google ID token, auto-register if new, return JWT
 app.post('/api/auth/google', async (req, res) => {
   if (!googleClient) {
     return res.status(500).json({ error: 'GOOGLE_CLIENT_ID not configured' });
   }
   try {
-    const { credential } = req.body;
-    const ticket = await googleClient.verifyIdToken({
+    var credential = req.body.credential;
+    var ticket = await googleClient.verifyIdToken({
       idToken: credential,
       audience: GOOGLE_CLIENT_ID,
     });
-    const payload = ticket.getPayload();
-    const email = payload.email;
+    var payload = ticket.getPayload();
+    var email = payload.email;
+    var name = payload.name || email.split('@')[0];
+    var picture = payload.picture || '';
+    var googleId = payload.sub;
 
-    const { rows } = await pool.query(
-      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]
+    // Check if user exists by email or google_id
+    var result = await pool.query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1) OR google_id = $2',
+      [email, googleId]
     );
-    if (rows.length === 0) {
-      return res.status(403).json({
-        error: 'NOT_FOUND',
-        message: 'ไม่พบ email นี้ในระบบ กรุณาติดต่อ Admin'
+
+    var emp;
+    if (result.rows.length === 0) {
+      // Auto-register: create new user with status='pending'
+      var insertResult = await pool.query(
+        'INSERT INTO employees (name, email, google_id, picture, status, is_admin) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+        [name, email, googleId, picture, 'pending', false]
+      );
+      emp = rowToCamel(insertResult.rows[0]);
+      return res.json({
+        status: 'pending',
+        message: 'ลงทะเบียนสำเร็จ! กรุณารอ Admin อนุมัติ',
+        user: { name: emp.name, email: emp.email, picture: emp.picture, status: 'pending' }
       });
     }
-    const emp = rowToCamel(rows[0]);
-    const token = jwt.sign(
-      { sub: emp.id, email: emp.email, name: emp.name, isAdmin: emp.isAdmin },
+
+    // User exists — update google_id and picture if needed
+    emp = result.rows[0];
+    if (!emp.google_id || !emp.picture) {
+      await pool.query(
+        'UPDATE employees SET google_id = COALESCE(google_id, $1), picture = COALESCE(picture, $2) WHERE id = $3',
+        [googleId, picture, emp.id]
+      );
+    }
+    emp = rowToCamel(emp);
+
+    // Check approval status
+    if (emp.status === 'pending') {
+      return res.json({
+        status: 'pending',
+        message: 'บัญชีของคุณกำลังรอ Admin อนุมัติ',
+        user: { name: emp.name, email: emp.email, picture: emp.picture, status: 'pending' }
+      });
+    }
+    if (emp.status === 'rejected') {
+      return res.status(403).json({
+        error: 'REJECTED',
+        message: 'บัญชีของคุณถูกปฏิเสธ กรุณาติดต่อ Admin'
+      });
+    }
+
+    // Approved — issue JWT
+    var token = jwt.sign(
+      { sub: emp.id, email: emp.email, name: emp.name, isAdmin: emp.isAdmin, visibleTabs: emp.visible_tabs || '' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-    res.json({ token, user: emp });
+    // Re-read with visible_tabs
+    var freshRow = await pool.query('SELECT * FROM employees WHERE id = $1', [emp.id]);
+    var freshEmp = rowToCamel(freshRow.rows[0]);
+    res.json({ status: 'approved', token: token, user: freshEmp });
   } catch (err) {
     console.error('Auth error:', err);
     res.status(401).json({ error: 'AUTH_FAILED', message: 'การยืนยันตัวตนล้มเหลว' });
+  }
+});
+
+// GET /api/admin/pending-users — Admin: list pending users
+app.get('/api/admin/pending-users', requireAuth, async function(req, res) {
+  try {
+    var result = await pool.query(
+      'SELECT id, name, email, picture, status, google_id FROM employees WHERE status = $1 ORDER BY id DESC',
+      ['pending']
+    );
+    res.json(result.rows.map(rowToCamel));
+  } catch (err) {
+    console.error('GET /api/admin/pending-users error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/all-users — Admin: list all users with status
+app.get('/api/admin/all-users', requireAuth, async function(req, res) {
+  try {
+    var result = await pool.query(
+      'SELECT id, name, email, picture, status, is_admin, google_id, visible_tabs FROM employees ORDER BY id'
+    );
+    res.json(result.rows.map(rowToCamel));
+  } catch (err) {
+    console.error('GET /api/admin/all-users error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/approve-user — Admin: approve or reject a user
+app.post('/api/admin/approve-user', requireAuth, async function(req, res) {
+  try {
+    var userId = req.body.userId;
+    var action = req.body.action; // 'approve' or 'reject'
+    if (!userId || !action) {
+      return res.status(400).json({ error: 'userId and action required' });
+    }
+    var newStatus = action === 'approve' ? 'approved' : 'rejected';
+    await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+    res.json({ success: true, userId: userId, status: newStatus });
+  } catch (err) {
+    console.error('POST /api/admin/approve-user error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/set-visible-tabs — Admin: set which tabs a user can see
+app.post('/api/admin/set-visible-tabs', requireAuth, async function(req, res) {
+  try {
+    var userId = req.body.userId;
+    var visibleTabs = req.body.visibleTabs || ''; // comma-separated tab keys, empty = all
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+    await pool.query('UPDATE employees SET visible_tabs = $1 WHERE id = $2', [visibleTabs, userId]);
+    res.json({ success: true, userId: userId, visibleTabs: visibleTabs });
+  } catch (err) {
+    console.error('POST /api/admin/set-visible-tabs error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -166,7 +270,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog] = await Promise.all([
       pool.query('SELECT name FROM brands ORDER BY name'),
-      pool.query('SELECT id, name, email, brands, note, is_admin FROM employees ORDER BY id'),
+      pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
@@ -212,14 +316,31 @@ app.put('/api/data', requireAuth, async (req, res) => {
       }
     }
 
-    // --- Employees ---
+    // --- Employees (preserve google_id, status, picture) ---
     if (Array.isArray(db.employees)) {
-      await client.query('DELETE FROM employees');
-      for (const e of db.employees) {
-        await client.query(
-          'INSERT INTO employees (name, email, brands, note, is_admin) VALUES ($1,$2,$3,$4,$5)',
-          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false]
-        );
+      var existingEmps = await client.query('SELECT id, email, google_id, status, picture FROM employees');
+      var empMap = {};
+      existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
+      var newEmpEmails = db.employees.map(function(e){ return (e.email||'').toLowerCase(); }).filter(Boolean);
+      for (var row of existingEmps.rows) {
+        if(row.email && !newEmpEmails.includes(row.email.toLowerCase())){
+          await client.query('DELETE FROM employees WHERE id = $1', [row.id]);
+        }
+      }
+      for (var emp of db.employees) {
+        var empKey = (emp.email||'').toLowerCase();
+        var exEmp = empMap[empKey];
+        if(exEmp){
+          await client.query(
+            'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5',
+            [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, exEmp.id]
+          );
+        } else {
+          await client.query(
+            'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
+            [emp.name||'', emp.email||'', emp.brands||'', emp.note||'', emp.isAdmin||false, 'approved']
+          );
+        }
       }
     }
 
@@ -329,7 +450,7 @@ app.put('/api/brands', requireAuth, async (req, res) => {
 // ============================================================
 app.get('/api/employees', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin FROM employees ORDER BY id');
+    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']);
     res.json(rows.map(rowToCamel));
   } catch (err) {
     console.error('GET /api/employees error:', err.message);
@@ -341,12 +462,38 @@ app.put('/api/employees', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM employees');
-    for (const e of req.body.employees || []) {
-      await client.query(
-        'INSERT INTO employees (name, email, brands, note, is_admin) VALUES ($1,$2,$3,$4,$5)',
-        [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false]
-      );
+    // UPSERT: update existing by email, insert new ones — preserve google_id, status, picture
+    var employees = req.body.employees || [];
+    // Get existing employees to preserve auth fields
+    var existing = await client.query('SELECT id, email, google_id, status, picture, visible_tabs FROM employees');
+    var existingMap = {};
+    existing.rows.forEach(function(r){ if(r.email) existingMap[r.email.toLowerCase()] = r; });
+
+    // Delete employees not in the new list
+    var newEmails = employees.map(function(e){ return (e.email||'').toLowerCase(); }).filter(Boolean);
+    for (var row of existing.rows) {
+      if(row.email && !newEmails.includes(row.email.toLowerCase())){
+        await client.query('DELETE FROM employees WHERE id = $1', [row.id]);
+      }
+    }
+
+    // Upsert each employee
+    for (var e of employees) {
+      var emailKey = (e.email||'').toLowerCase();
+      var ex = existingMap[emailKey];
+      if(ex){
+        // Update existing — keep google_id, status, picture
+        await client.query(
+          'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5',
+          [e.name||'', e.brands||'', e.note||'', e.isAdmin||false, ex.id]
+        );
+      } else {
+        // Insert new — status=approved (admin added them manually)
+        await client.query(
+          'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
+          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, 'approved']
+        );
+      }
     }
     await client.query('COMMIT');
     res.json({ success: true });

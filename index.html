@@ -135,6 +135,40 @@ select.cell{padding:0 4px;cursor:pointer;}
 .btn-logout:hover{border-color:var(--red);color:var(--red);}
 .toast.show{opacity:1;}
 
+/* PENDING SCREEN */
+#pendingScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:10001;display:none;align-items:center;justify-content:center;flex-direction:column;}
+.pending-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;max-width:420px;width:90%;}
+.pending-icon{font-size:48px;margin-bottom:16px;}
+.pending-title{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--yellow);}
+.pending-msg{font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6;}
+.pending-email{font-size:14px;color:var(--accent);font-weight:600;margin-bottom:16px;}
+
+/* ADMIN USER MANAGEMENT */
+.user-mgmt-table{width:100%;border-collapse:collapse;margin-top:12px;}
+.user-mgmt-table th{background:#12152a;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border:1px solid var(--border);text-align:left;}
+.user-mgmt-table td{padding:8px 10px;border:1px solid var(--border);font-size:12px;}
+.user-mgmt-table tr:nth-child(even) td{background:rgba(255,255,255,.015);}
+.user-avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:6px;}
+.status-pending{color:var(--yellow);font-weight:600;}
+.status-approved{color:var(--green);font-weight:600;}
+.status-rejected{color:var(--red);font-weight:600;}
+.btn-approve{background:var(--green);color:#000;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;margin-right:4px;}
+.btn-reject{background:var(--red);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;}
+
+/* TAB PERMISSION MODAL */
+.tab-perm-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:20000;display:flex;align-items:center;justify-content:center;}
+.tab-perm-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto;}
+.tab-perm-modal h3{font-size:14px;margin-bottom:4px;}
+.tab-perm-modal .sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
+.tab-perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.tab-perm-item{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:6px;font-size:12px;cursor:pointer;}
+.tab-perm-item input{cursor:pointer;}
+.tab-perm-item.checked{background:rgba(108,99,255,.15);}
+.tab-perm-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.btn-tab-perm{border:none;border-radius:6px;padding:6px 16px;font-size:12px;cursor:pointer;font-weight:600;}
+.btn-set-tabs{background:var(--accent);color:#fff;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;}
+.btn-set-tabs:hover{background:var(--accent);opacity:.8;}
+
 /* ลบ spinner ลูกศรขึ้น/ลงออกทั้งหมด */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
@@ -271,6 +305,17 @@ input[type=number]{-moz-appearance:textfield;}
   </div>
 </div>
 
+<!-- PENDING APPROVAL SCREEN -->
+<div id="pendingScreen">
+  <div class="pending-card">
+    <div class="pending-icon">⏳</div>
+    <div class="pending-title">รอการอนุมัติ</div>
+    <div class="pending-email" id="pendingEmail"></div>
+    <div class="pending-msg">บัญชีของคุณได้ลงทะเบียนเรียบร้อยแล้ว<br>กรุณารอ Admin อนุมัติก่อนเข้าใช้งาน</div>
+    <button class="btn btn-ghost" onclick="handleLogout()" style="margin-top:8px;">ออกจากระบบ</button>
+  </div>
+</div>
+
 <!-- HEADER -->
 <div class="header">
   <div class="logo">
@@ -357,6 +402,24 @@ input[type=number]{-moz-appearance:textfield;}
         <tbody id="empConfigTable"></tbody>
       </table>
       <button class="btn btn-success btn-sm" onclick="saveEmployeeConfig()" style="margin-top:8px;">💾 บันทึกพนักงาน</button>
+    </div>
+    <!-- ADMIN: User Access Management -->
+    <div class="card" id="adminUserMgmtCard" style="display:none;">
+      <div class="card-title">🔐 จัดการสิทธิ์เข้าใช้งาน (Admin Only)
+        <button class="btn btn-ghost btn-sm" onclick="loadUserManagement()">🔄 รีเฟรช</button>
+      </div>
+      <div id="pendingUsersSection" style="display:none;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;color:var(--yellow);margin-bottom:8px;">⏳ รอการอนุมัติ (<span id="pendingCount">0</span> คน)</div>
+        <table class="user-mgmt-table">
+          <thead><tr><th></th><th>ชื่อ</th><th>Email</th><th>การจัดการ</th></tr></thead>
+          <tbody id="pendingUsersTable"></tbody>
+        </table>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">ผู้ใช้งานทั้งหมด</div>
+      <table class="user-mgmt-table">
+        <thead><tr><th></th><th>ชื่อ</th><th>Email</th><th>สถานะ</th><th>Admin</th><th>การจัดการ</th></tr></thead>
+        <tbody id="allUsersTable"></tbody>
+      </table>
     </div>
   </div>
   <div style="margin-top:14px;">
@@ -887,25 +950,33 @@ function initGoogleSignIn(){
 }
 
 async function handleGoogleSignIn(response){
-  const loginError = document.getElementById('loginError');
+  var loginError = document.getElementById('loginError');
   loginError.style.display = 'none';
   try {
-    const res = await fetch(API_BASE + '/api/auth/google', {
+    var res = await fetch(API_BASE + '/api/auth/google', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ credential: response.credential })
     });
-    const data = await res.json();
+    var data = await res.json();
     if(!res.ok){
       loginError.textContent = data.message || 'เข้าสู่ระบบไม่สำเร็จ';
       loginError.style.display = 'block';
       return;
     }
+    // Check if pending approval
+    if(data.status === 'pending'){
+      showLoginScreen(false);
+      showPendingScreen(true, data.user);
+      return;
+    }
+    // Approved — proceed
     AUTH_TOKEN = data.token;
     localStorage.setItem('ecom_token', data.token);
     CURRENT_USER = data.user.name || data.user.email;
     localStorage.setItem('ecom_user', CURRENT_USER);
     showLoginScreen(false);
+    showPendingScreen(false);
     showAuthBadge(data.user);
     initApp();
   } catch(e){
@@ -914,14 +985,28 @@ async function handleGoogleSignIn(response){
   }
 }
 
+function showPendingScreen(show, user){
+  var el = document.getElementById('pendingScreen');
+  if(el) el.style.display = show ? 'flex' : 'none';
+  if(show && user){
+    var emailEl = document.getElementById('pendingEmail');
+    if(emailEl) emailEl.textContent = user.email || '';
+  }
+}
+
 async function checkExistingSession(){
   if(!AUTH_TOKEN) return false;
   try {
-    const res = await fetch(API_BASE + '/api/auth/me', {
+    var res = await fetch(API_BASE + '/api/auth/me', {
       headers:{'Authorization':'Bearer ' + AUTH_TOKEN}
     });
     if(!res.ok) throw new Error('Token invalid');
-    const data = await res.json();
+    var data = await res.json();
+    // Check if user is still approved
+    if(data.user.status && data.user.status !== 'approved'){
+      showPendingScreen(true, data.user);
+      return 'pending';
+    }
     CURRENT_USER = data.user.name || data.user.email;
     localStorage.setItem('ecom_user', CURRENT_USER);
     showAuthBadge(data.user);
@@ -1178,6 +1263,8 @@ async function initApp(){
       showLoadingOverlay(false);
       setSaveStatus('ok','✅ โหลดข้อมูลจาก API แล้ว');
       await loadLineTemplates();
+      loadUserManagement(); // Load admin user panel if admin
+      applyTabVisibility(); // Hide tabs based on user permission
       setInterval(autoSaveAPI, 120000); // autosave ทุก 2 นาที
     } catch(e) {
       console.error('initApp API error:', e);
@@ -2994,6 +3081,253 @@ function onMonthChange(){
 }
 
 // ============================================================
+// ADMIN: User Management
+// ============================================================
+async function loadUserManagement(){
+  var card = document.getElementById('adminUserMgmtCard');
+  if(!card) return;
+  // Show card only if current user is admin
+  var isAdmin = false;
+  if(DB.employees && Array.isArray(DB.employees)){
+    var me = DB.employees.find(function(e){ return e.name === CURRENT_USER || e.email === CURRENT_USER; });
+    if(me && me.isAdmin) isAdmin = true;
+  }
+  // Also check JWT token
+  if(AUTH_TOKEN){
+    try {
+      var parts = AUTH_TOKEN.split('.');
+      if(parts.length === 3){
+        var payload = JSON.parse(atob(parts[1]));
+        if(payload.isAdmin) isAdmin = true;
+      }
+    } catch(e){}
+  }
+  if(!isAdmin){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  try {
+    // Load pending users
+    var pendingRes = await apiFetch(API_BASE + '/api/admin/pending-users');
+    var pendingUsers = await pendingRes.json();
+    var pendingSection = document.getElementById('pendingUsersSection');
+    var pendingCount = document.getElementById('pendingCount');
+    var pendingTable = document.getElementById('pendingUsersTable');
+
+    if(pendingUsers.length > 0){
+      pendingSection.style.display = 'block';
+      pendingCount.textContent = pendingUsers.length;
+      var phtml = '';
+      pendingUsers.forEach(function(u){
+        var pic = u.picture ? '<img src="' + u.picture + '" class="user-avatar">' : '👤 ';
+        phtml += '<tr>';
+        phtml += '<td>' + pic + '</td>';
+        phtml += '<td>' + (u.name||'') + '</td>';
+        phtml += '<td>' + (u.email||'') + '</td>';
+        phtml += '<td><button class="btn-approve" onclick="adminApproveUser(' + u.id + ',\'approve\')">อนุมัติ</button>';
+        phtml += '<button class="btn-reject" onclick="adminApproveUser(' + u.id + ',\'reject\')">ปฏิเสธ</button></td>';
+        phtml += '</tr>';
+      });
+      pendingTable.innerHTML = phtml;
+    } else {
+      pendingSection.style.display = 'none';
+    }
+
+    // Load all users
+    var allRes = await apiFetch(API_BASE + '/api/admin/all-users');
+    var allUsers = await allRes.json();
+    var allTable = document.getElementById('allUsersTable');
+    var ahtml = '';
+    allUsers.forEach(function(u){
+      var pic = u.picture ? '<img src="' + u.picture + '" class="user-avatar">' : '👤 ';
+      var statusClass = 'status-' + (u.status||'approved');
+      var statusText = u.status === 'pending' ? 'รออนุมัติ' : u.status === 'approved' ? 'อนุมัติแล้ว' : u.status === 'rejected' ? 'ปฏิเสธ' : (u.status||'approved');
+      var adminBadge = u.isAdmin ? '👑' : '';
+      var tabInfo = u.visibleTabs ? (u.visibleTabs.split(',').length + ' tab') : 'ทั้งหมด';
+      var actions = '';
+      if(u.status === 'pending'){
+        actions = '<button class="btn-approve" onclick="adminApproveUser(' + u.id + ',\'approve\')">อนุมัติ</button>';
+        actions += '<button class="btn-reject" onclick="adminApproveUser(' + u.id + ',\'reject\')">ปฏิเสธ</button>';
+      } else if(u.status === 'approved'){
+        actions = '<button class="btn-set-tabs" onclick="openTabPermModal(' + u.id + ',\'' + (u.name||'').replace(/'/g,"\\'") + '\',\'' + (u.visibleTabs||'') + '\',' + (u.isAdmin?'true':'false') + ')">กำหนด Tab</button> ';
+        actions += '<button class="btn-reject" onclick="adminApproveUser(' + u.id + ',\'reject\')" style="font-size:10px;">ระงับ</button>';
+      } else if(u.status === 'rejected'){
+        actions = '<button class="btn-approve" onclick="adminApproveUser(' + u.id + ',\'approve\')" style="font-size:10px;">อนุมัติใหม่</button>';
+      }
+      ahtml += '<tr>';
+      ahtml += '<td>' + pic + '</td>';
+      ahtml += '<td>' + (u.name||'') + '</td>';
+      ahtml += '<td>' + (u.email||'') + '</td>';
+      ahtml += '<td><span class="' + statusClass + '">' + statusText + '</span></td>';
+      ahtml += '<td>' + adminBadge + '</td>';
+      ahtml += '<td>' + actions + '</td>';
+      ahtml += '</tr>';
+    });
+    allTable.innerHTML = ahtml;
+  } catch(e){
+    console.error('loadUserManagement error:', e);
+  }
+}
+
+// TAB PERMISSION — tab key ↔ label mapping
+var ALL_TAB_DEFS = [
+  {key:'config', label:'Config'},
+  {key:'tt', label:'Daily TikTok'},
+  {key:'sp', label:'Daily Shopee'},
+  {key:'lz', label:'Daily Lazada'},
+  {key:'monthly', label:'Monthly PnL'},
+  {key:'dashboard', label:'Dashboard'},
+  {key:'daily_dash', label:'Daily Dashboard'},
+  {key:'ads_eff', label:'Ads Efficiency'},
+  {key:'line', label:'LINE Data'},
+  {key:'forecast', label:'Forecast'},
+  {key:'apm', label:'APM Task'},
+  {key:'audit', label:'Audit Log'}
+];
+
+// Map tab DOM index to tab key (order must match HTML tabs)
+var TAB_INDEX_TO_KEY = ['config','tt','sp','lz','monthly','dashboard','daily_dash','ads_eff','line','forecast','apm','audit'];
+
+function openTabPermModal(userId, userName, currentTabs, isAdmin){
+  if(isAdmin){
+    showToast('Admin เห็นทุก tab เสมอ');
+    return;
+  }
+  var selected = currentTabs ? currentTabs.split(',') : [];
+  var allSelected = selected.length === 0; // empty = all
+  var html = '<div class="tab-perm-overlay" id="tabPermOverlay" onclick="if(event.target===this)closeTabPermModal()">';
+  html += '<div class="tab-perm-modal">';
+  html += '<h3>กำหนด Tab ที่มองเห็นได้</h3>';
+  html += '<div class="sub">"' + userName + '" — ติ๊กเฉพาะ tab ที่ต้องการให้เห็น (ไม่ติ๊ก = เห็นทุก tab)</div>';
+  html += '<div style="margin-bottom:10px;"><label style="font-size:12px;cursor:pointer;"><input type="checkbox" id="tabPermAll" onchange="toggleAllTabPerm(this)" ' + (allSelected ? 'checked' : '') + '> เห็นทุก Tab</label></div>';
+  html += '<div class="tab-perm-grid" id="tabPermGrid">';
+  ALL_TAB_DEFS.forEach(function(t){
+    var checked = allSelected || selected.includes(t.key);
+    html += '<label class="tab-perm-item' + (checked ? ' checked' : '') + '">';
+    html += '<input type="checkbox" value="' + t.key + '" ' + (checked ? 'checked' : '') + ' onchange="updateTabPermItem(this)" ' + (allSelected ? 'disabled' : '') + '>';
+    html += t.label + '</label>';
+  });
+  html += '</div>';
+  html += '<div class="tab-perm-actions">';
+  html += '<button class="btn btn-ghost btn-sm" onclick="closeTabPermModal()">ยกเลิก</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveTabPerm(' + userId + ')">บันทึก</button>';
+  html += '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeTabPermModal(){
+  var el = document.getElementById('tabPermOverlay');
+  if(el) el.remove();
+}
+
+function toggleAllTabPerm(cb){
+  var grid = document.getElementById('tabPermGrid');
+  var boxes = grid.querySelectorAll('input[type=checkbox]');
+  boxes.forEach(function(b){
+    b.disabled = cb.checked;
+    b.checked = cb.checked;
+    b.parentElement.classList.toggle('checked', cb.checked);
+  });
+}
+
+function updateTabPermItem(cb){
+  cb.parentElement.classList.toggle('checked', cb.checked);
+  // Uncheck "all" if any individual is unchecked
+  var allCb = document.getElementById('tabPermAll');
+  if(!cb.checked && allCb) allCb.checked = false;
+}
+
+async function saveTabPerm(userId){
+  var allCb = document.getElementById('tabPermAll');
+  var visibleTabs = '';
+  if(!allCb.checked){
+    var grid = document.getElementById('tabPermGrid');
+    var boxes = grid.querySelectorAll('input[type=checkbox]:checked');
+    var keys = [];
+    boxes.forEach(function(b){ keys.push(b.value); });
+    visibleTabs = keys.join(',');
+  }
+  try {
+    var res = await apiFetch(API_BASE + '/api/admin/set-visible-tabs', {
+      method: 'POST',
+      body: JSON.stringify({ userId: userId, visibleTabs: visibleTabs })
+    });
+    var data = await res.json();
+    if(data.success){
+      showToast('✅ บันทึกสิทธิ์ Tab แล้ว');
+      closeTabPermModal();
+      loadUserManagement();
+    } else {
+      showToast('❌ ' + (data.error||'เกิดข้อผิดพลาด'));
+    }
+  } catch(e){
+    showToast('❌ ' + e.message);
+  }
+}
+
+// Apply tab visibility for current user
+function applyTabVisibility(){
+  // Admin always sees all
+  var isAdmin = false;
+  if(AUTH_TOKEN){
+    try {
+      var parts = AUTH_TOKEN.split('.');
+      if(parts.length === 3){
+        var payload = JSON.parse(atob(parts[1]));
+        if(payload.isAdmin) isAdmin = true;
+      }
+    } catch(e){}
+  }
+  if(isAdmin) return; // admin sees everything
+
+  // Get visible_tabs from current user
+  var visibleTabs = '';
+  if(DB.employees && Array.isArray(DB.employees)){
+    var me = DB.employees.find(function(e){ return e.name === CURRENT_USER || e.email === CURRENT_USER; });
+    if(me && me.visibleTabs) visibleTabs = me.visibleTabs;
+  }
+  if(!visibleTabs) return; // empty = all visible
+
+  var allowed = visibleTabs.split(',');
+  var tabs = document.querySelectorAll('.tabs .tab');
+  tabs.forEach(function(tab, idx){
+    if(idx < TAB_INDEX_TO_KEY.length){
+      var key = TAB_INDEX_TO_KEY[idx];
+      if(!allowed.includes(key)){
+        tab.style.display = 'none';
+      } else {
+        tab.style.display = '';
+      }
+    }
+  });
+
+  // If current active tab is hidden, switch to first visible tab
+  var activeTab = document.querySelector('.tabs .tab.active');
+  if(activeTab && activeTab.style.display === 'none'){
+    var firstVisible = document.querySelector('.tabs .tab:not([style*="display: none"])');
+    if(firstVisible) firstVisible.click();
+  }
+}
+
+async function adminApproveUser(userId, action){
+  try {
+    var res = await apiFetch(API_BASE + '/api/admin/approve-user', {
+      method: 'POST',
+      body: JSON.stringify({ userId: userId, action: action })
+    });
+    var data = await res.json();
+    if(data.success){
+      var msg = action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว';
+      showToast('✅ ' + msg);
+      loadUserManagement(); // refresh
+    } else {
+      showToast('❌ ' + (data.error||'เกิดข้อผิดพลาด'));
+    }
+  } catch(e){
+    showToast('❌ ' + e.message);
+  }
+}
+
+// ============================================================
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async ()=>{
@@ -3008,10 +3342,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
   if(GOOGLE_CLIENT_ID_CACHED){
     // Google OAuth mode — check existing session first
-    const hasSession = await checkExistingSession();
-    if(hasSession){
+    var hasSession = await checkExistingSession();
+    if(hasSession === true){
       showLoginScreen(false);
+      showPendingScreen(false);
       initApp();
+    } else if(hasSession === 'pending'){
+      // Already showing pending screen
     } else {
       showLoginScreen(true);
       // Wait for GIS library to load then render button
