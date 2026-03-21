@@ -1103,11 +1103,26 @@ async function checkExistingSession(){
     var res = await fetch(API_BASE + '/api/auth/me', {
       headers:{'Authorization':'Bearer ' + AUTH_TOKEN}
     });
+    if(res.status === 403){
+      // บัญชียังไม่อนุมัติหรือถูกระงับ
+      var errData = null;
+      try { errData = await res.json(); } catch(e2){}
+      if(errData && errData.user){
+        showPendingScreen(true, errData.user);
+      } else {
+        showPendingScreen(true, {email:'', status:'pending'});
+      }
+      sessionStorage.removeItem('ecom_token');
+      AUTH_TOKEN = '';
+      return 'pending';
+    }
     if(!res.ok) throw new Error('Token invalid');
     var data = await res.json();
-    // Check if user is still approved
-    if(data.user.status && data.user.status !== 'approved'){
+    // Double-check: ต้องเป็น 'approved' เท่านั้น
+    if(!data.user.status || data.user.status !== 'approved'){
       showPendingScreen(true, data.user);
+      sessionStorage.removeItem('ecom_token');
+      AUTH_TOKEN = '';
       return 'pending';
     }
     CURRENT_USER = data.user.name || data.user.email;

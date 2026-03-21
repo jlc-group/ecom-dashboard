@@ -287,7 +287,7 @@ app.post('/api/admin/set-editable-tabs', requireAuth, async function(req, res) {
   }
 });
 
-// GET /api/auth/me — verify JWT, return user info
+// GET /api/auth/me — verify JWT, return user info (ต้องเป็น approved เท่านั้น)
 app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'NO_TOKEN' });
@@ -296,7 +296,12 @@ app.get('/api/auth/me', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     const { rows } = await pool.query('SELECT * FROM employees WHERE id = $1', [decoded.sub]);
     if (rows.length === 0) return res.status(401).json({ error: 'USER_NOT_FOUND' });
-    res.json({ user: rowToCamel(rows[0]) });
+    var emp = rowToCamel(rows[0]);
+    // ต้องเป็น approved เท่านั้น — ถ้าไม่ใช่ให้บล็อค
+    if (emp.status !== 'approved') {
+      return res.status(403).json({ error: 'NOT_APPROVED', message: 'บัญชียังไม่อนุมัติหรือถูกระงับ', user: { name: emp.name, email: emp.email, status: emp.status || 'pending' } });
+    }
+    res.json({ user: emp });
   } catch (err) {
     res.status(401).json({ error: 'INVALID_TOKEN' });
   }
