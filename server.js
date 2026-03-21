@@ -152,9 +152,10 @@ app.post('/api/auth/google', async (req, res) => {
     var emp;
     if (result.rows.length === 0) {
       var newStatus = AUTO_APPROVE_USERS ? 'approved' : 'pending';
+      var defaultTabs = AUTO_APPROVE_USERS ? DEFAULT_VISIBLE_TABS : '';
       var insertResult = await pool.query(
-        'INSERT INTO employees (name, email, google_id, picture, status, is_admin) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-        [name, email, googleId, picture, newStatus, false]
+        'INSERT INTO employees (name, email, google_id, picture, status, is_admin, visible_tabs) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+        [name, email, googleId, picture, newStatus, false, defaultTabs]
       );
       var newId = insertResult.rows[0].id;
       if (!AUTO_APPROVE_USERS) {
@@ -238,6 +239,9 @@ app.get('/api/admin/all-users', requireAuth, async function(req, res) {
   }
 });
 
+// ค่าเริ่มต้น: user ใหม่ที่ approved จะเห็นแค่ Current Task เท่านั้น (admin ค่อยเปิดเพิ่มเอง)
+var DEFAULT_VISIBLE_TABS = 'apm';
+
 // POST /api/admin/approve-user — Admin: approve or reject a user
 app.post('/api/admin/approve-user', requireAuth, async function(req, res) {
   try {
@@ -247,7 +251,17 @@ app.post('/api/admin/approve-user', requireAuth, async function(req, res) {
       return res.status(400).json({ error: 'userId and action required' });
     }
     var newStatus = action === 'approve' ? 'approved' : 'rejected';
-    await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+    if (action === 'approve') {
+      // ถ้ายังไม่เคยกำหนด visible_tabs → ตั้งค่าเริ่มต้นให้เห็นแค่ Current Task
+      var current = await pool.query('SELECT visible_tabs FROM employees WHERE id = $1', [userId]);
+      if (current.rows.length > 0 && (!current.rows[0].visible_tabs || current.rows[0].visible_tabs === '')) {
+        await pool.query('UPDATE employees SET status = $1, visible_tabs = $2 WHERE id = $3', [newStatus, DEFAULT_VISIBLE_TABS, userId]);
+      } else {
+        await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+      }
+    } else {
+      await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+    }
     res.json({ success: true, userId: userId, status: newStatus });
   } catch (err) {
     console.error('POST /api/admin/approve-user error:', err);
