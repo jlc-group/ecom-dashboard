@@ -11,7 +11,7 @@
   --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --border:#2e3350;
   --accent:#6c63ff; --green:#00d4aa; --red:#ff6b6b; --yellow:#ffd166;
   --text:#e8eaf6; --muted:#8892b0;
-  --tt:#ee1d52; --sp:#f57b24; --lz:#7b6cf4;
+  --tt:#9b59b6; --sp:#f57b24; --lz:#2980b9;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;font-size:13px;}
@@ -417,9 +417,9 @@ input[type=number]{-moz-appearance:textfield;}
 <!-- TABS -->
 <div class="tabs">
   <div class="tab" onclick="showPage('config',this)">⚙️ Config</div>
-  <div class="tab tab-tt" onclick="showPage('tt',this)">🔴 Daily_TikTok</div>
+  <div class="tab tab-tt" onclick="showPage('tt',this)">🟣 Daily_TikTok</div>
   <div class="tab tab-sp" onclick="showPage('sp',this)">🟠 Daily_Shopee</div>
-  <div class="tab tab-lz" onclick="showPage('lz',this)">🟣 Daily_Lazada</div>
+  <div class="tab tab-lz" onclick="showPage('lz',this)">🔵 Daily_Lazada</div>
   <div class="tab" onclick="showPage('monthly',this)">📋 Monthly_PnL</div>
   <div class="tab active" onclick="showPage('dashboard',this)">📊 Dashboard</div>
   <div class="tab" onclick="showPage('ads',this)">📢 Ads_Efficiency</div>
@@ -532,7 +532,7 @@ input[type=number]{-moz-appearance:textfield;}
 <div id="page-tt" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
     <div style="display:flex;align-items:center;gap:10px;">
-      <div style="font-size:14px;font-weight:700;color:var(--tt);">🔴 Daily TikTok</div>
+      <div style="font-size:14px;font-weight:700;color:var(--tt);">🟣 Daily TikTok</div>
       <span id="tt-brand-badge"></span>
     </div>
     <div style="font-size:11px;color:var(--muted);" id="tt-rowcount"></div>
@@ -607,7 +607,7 @@ input[type=number]{-moz-appearance:textfield;}
 <div id="page-lz" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
     <div style="display:flex;align-items:center;gap:10px;">
-      <div style="font-size:14px;font-weight:700;color:var(--lz);">🟣 Daily Lazada</div>
+      <div style="font-size:14px;font-weight:700;color:var(--lz);">🔵 Daily Lazada</div>
       <span id="lz-brand-badge"></span>
     </div>
     <div style="font-size:11px;color:var(--muted);" id="lz-rowcount"></div>
@@ -2304,7 +2304,7 @@ function renderDailyDash(){
     return `<tr>
       <td class="num">${r.date||'—'}</td>
       <td style="font-weight:600">${r.brand||'—'}</td>
-      <td><span style="padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600;background:${r.platform==='tt'?'rgba(238,29,82,.15)':r.platform==='sp'?'rgba(245,123,36,.15)':'rgba(123,108,244,.15)'};color:${r.platform==='tt'?'#ff6b8a':r.platform==='sp'?'#ffa05c':'#a78bfa'}">${platName[r.platform]}</span></td>
+      <td><span style="padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600;background:${r.platform==='tt'?'rgba(155,89,182,.15)':r.platform==='sp'?'rgba(245,123,36,.15)':'rgba(41,128,185,.15)'};color:${r.platform==='tt'?'#bb8fce':r.platform==='sp'?'#ffa05c':'#5dade2'}">${platName[r.platform]}</span></td>
       <td class="num">${'฿'+fmt(gmv)}</td>
       <td class="num">${fmt(p(r.orders))}</td>
       <td class="num">${'฿'+fmt(p(r.cogs)||0)}</td>
