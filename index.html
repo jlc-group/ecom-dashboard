@@ -694,7 +694,7 @@ input[type=number]{-moz-appearance:textfield;}
     <div style="overflow-x:auto;"><table class="sum-table" id="tAds">
       <thead><tr>
         <th>Brand</th><th>Ads Spend</th><th>GMV</th><th>ROAS</th>
-        <th>CPO (Cost/Order)</th><th>Ads/GMV%</th>
+        <th>Avg Daily Spend</th><th>Ads/GMV%</th>
         <th>TikTok Ads</th><th>Shopee Ads</th><th>Lazada Ads</th><th>Status</th>
       </tr></thead>
       <tbody id="tbAds"></tbody>
@@ -2267,7 +2267,7 @@ function renderAds(){
     {label:'Total Ads Spend',val:'฿'+fmt(totalAds),c:'#ffd166'},
     {label:'Avg ROAS',val:roas.toFixed(1)+'x',c:roas>=ROAS_TARGET?'#00d4aa':'#ff6b6b'},
     {label:'Ads/GMV%',val:totalGMV>0?(totalAds/totalGMV*100).toFixed(1)+'%':'0%',c:'#a78bfa'},
-    {label:'CPO (Cost/Order)',val:totalOrders>0?'฿'+fmt(totalAds/totalOrders):'—',c:'#6c63ff'},
+    {label:'Avg Daily Spend',val:(function(){ var dates={}; rows.forEach(function(r){if(r.date)dates[r.date]=1;}); var days=Object.keys(dates).length; return days>0?'฿'+fmt(Math.round(totalAds/days)):'—'; })(),c:'#6c63ff'},
   ].map(k=>`<div class="kpi" style="--c:${k.c}"><div class="kpi-label">${k.label}</div><div class="kpi-val">${k.val}</div></div>`).join('');
 
   mkChart('cAdsGMV',{type:'bar',data:{labels:brandKeys,datasets:[
@@ -2282,14 +2282,15 @@ function renderAds(){
   const tbody = document.getElementById('tbAds');
   tbody.innerHTML = brandKeys.map((b,i)=>{
     const d=byBrand[b];
-    const cpo=d.orders>0?fmt(d.ads/d.orders):'—';
+    var dDates={}; rows.filter(function(r){return r.brand===b;}).forEach(function(r){if(r.date)dDates[r.date]=1;}); var dDays=Object.keys(dDates).length;
+    const avgDaily=dDays>0?fmt(Math.round(d.ads/dDays)):'—';
     const adsGmv=d.gmv>0?(d.ads/d.gmv*100).toFixed(1):'0';
     return `<tr>
       <td style="font-weight:600"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${BRAND_COLORS[i%BRAND_COLORS.length]}"></span>${b}</span></td>
       <td class="num">${'฿'+fmt(d.ads)}</td>
       <td class="num">${'฿'+fmt(d.gmv)}</td>
       <td><span class="pill ${d.roas>=ROAS_TARGET?'pill-g':'pill-y'}">${d.roas.toFixed(1)}x</span></td>
-      <td class="num">฿${cpo}</td>
+      <td class="num">฿${avgDaily}</td>
       <td><span class="pill pill-y">${adsGmv}%</span></td>
       <td class="num">${'฿'+fmt(d.byPlat.tt.ads)}</td>
       <td class="num">${'฿'+fmt(d.byPlat.sp.ads)}</td>
