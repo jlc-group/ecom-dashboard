@@ -107,13 +107,19 @@ async function issueJwtForEmployee(res, employeeId) {
   res.json({ status: 'approved', token: token, user: freshEmp });
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   if (!GOOGLE_CLIENT_ID) return next(); // skip auth if not configured
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'NO_TOKEN' });
   try {
     const token = authHeader.replace('Bearer ', '');
-    req.user = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    // Double-check user is still approved in DB (ป้องกันกรณี JWT ยังไม่หมดอายุแต่ถูกระงับแล้ว)
+    const { rows } = await pool.query('SELECT status FROM employees WHERE id = $1', [decoded.sub]);
+    if (rows.length === 0 || rows[0].status !== 'approved') {
+      return res.status(403).json({ error: 'NOT_APPROVED', message: 'บัญชีถูกระงับหรือยังไม่อนุมัติ' });
+    }
     next();
   } catch (err) {
     res.status(401).json({ error: 'INVALID_TOKEN' });
@@ -173,22 +179,27 @@ app.post('/api/auth/google', async (req, res) => {
     }
     emp = rowToCamel(emp);
 
-    // Check approval status
-    if (emp.status === 'pending') {
+    // Check approval status — ต้องเป็น 'approved' เท่านั้นถึงจะเข้าได้
+    if (emp.status === 'rejected') {
+      return res.status(403).json({
+        error: 'REJECTED',
+        message: 'บัญชีของคุณถูกปฏิเสธ กรุณาติดต่อ Admin'
+      });
+    }
+    if (emp.status !== 'approved') {
+      // status เป็น pending, null, undefined, หรืออื่นๆ → ต้องรออนุมัติ
       if (AUTO_APPROVE_USERS) {
         await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['approved', emp.id]);
         return issueJwtForEmployee(res, emp.id);
+      }
+      // ถ้า status เป็น null ให้อัพเดตเป็น pending
+      if (!emp.status) {
+        await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['pending', emp.id]);
       }
       return res.json({
         status: 'pending',
         message: 'บัญชีของคุณกำลังรอ Admin อนุมัติ',
         user: { name: emp.name, email: emp.email, picture: emp.picture, status: 'pending' }
-      });
-    }
-    if (emp.status === 'rejected') {
-      return res.status(403).json({
-        error: 'REJECTED',
-        message: 'บัญชีของคุณถูกปฏิเสธ กรุณาติดต่อ Admin'
       });
     }
 

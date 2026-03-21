@@ -1019,6 +1019,12 @@ async function apiFetch(url, options){
     showToast('⚠️ Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
     throw new Error('Unauthorized');
   }
+  if(res.status === 403 && AUTH_TOKEN){
+    // บัญชีถูกระงับหรือยังไม่อนุมัติ
+    handleLogout();
+    showToast('⚠️ บัญชีของคุณถูกระงับ กรุณาติดต่อ Admin');
+    throw new Error('Not approved');
+  }
   return res;
 }
 
@@ -1069,6 +1075,9 @@ async function handleGoogleSignIn(response){
     sessionStorage.setItem('ecom_token', data.token);
     CURRENT_USER = data.user.name || data.user.email;
     sessionStorage.setItem('ecom_user', CURRENT_USER);
+    // เก็บ visibleTabs/editableTabs จาก auth response (fresh จาก DB)
+    CURRENT_USER_VISIBLE_TABS = (data.user.visibleTabs !== undefined && data.user.visibleTabs !== null) ? data.user.visibleTabs : null;
+    CURRENT_USER_EDITABLE_TABS = (data.user.editableTabs !== undefined && data.user.editableTabs !== null) ? data.user.editableTabs : null;
     showLoginScreen(false);
     showPendingScreen(false);
     showAuthBadge(data.user);
@@ -1103,6 +1112,9 @@ async function checkExistingSession(){
     }
     CURRENT_USER = data.user.name || data.user.email;
     sessionStorage.setItem('ecom_user', CURRENT_USER);
+    // เก็บ visibleTabs/editableTabs จาก /api/auth/me (fresh จาก DB)
+    CURRENT_USER_VISIBLE_TABS = (data.user.visibleTabs !== undefined && data.user.visibleTabs !== null) ? data.user.visibleTabs : null;
+    CURRENT_USER_EDITABLE_TABS = (data.user.editableTabs !== undefined && data.user.editableTabs !== null) ? data.user.editableTabs : null;
     showAuthBadge(data.user);
     return true;
   } catch(e){
@@ -3667,6 +3679,8 @@ function renderAPM(){
 // AUDIT LOG SYSTEM
 // ============================================================
 let CURRENT_USER = '';
+let CURRENT_USER_VISIBLE_TABS = null; // เก็บ visibleTabs จาก auth response (fresh จาก DB)
+let CURRENT_USER_EDITABLE_TABS = null;
 
 function setCurrentUser(name){
   CURRENT_USER = name;
@@ -4147,13 +4161,18 @@ function applyTabVisibility(){
   }
   if(isAdmin) return; // admin sees everything
 
-  // Get visible_tabs from current user
+  // Priority 1: ใช้ visibleTabs จาก auth response (fresh จาก DB ตอน login/checkSession)
+  // Priority 2: fallback ไปดูจาก DB.employees
   var visibleTabs = '';
-  if(DB.employees && Array.isArray(DB.employees)){
-    var me = DB.employees.find(function(e){ return e.name === CURRENT_USER || e.email === CURRENT_USER; });
-    if(me && me.visibleTabs) visibleTabs = me.visibleTabs;
+  if(CURRENT_USER_VISIBLE_TABS !== null && CURRENT_USER_VISIBLE_TABS !== undefined){
+    visibleTabs = CURRENT_USER_VISIBLE_TABS;
+  } else if(DB.employees && Array.isArray(DB.employees)){
+    var me = DB.employees.find(function(e){
+      return (e.name && e.name === CURRENT_USER) || (e.email && e.email === CURRENT_USER);
+    });
+    if(me && (me.visibleTabs !== null && me.visibleTabs !== undefined)) visibleTabs = me.visibleTabs;
   }
-  if(!visibleTabs) return; // empty = all visible
+  if(!visibleTabs) return; // empty string = all visible
 
   var allowed = visibleTabs.split(',');
   var tabs = document.querySelectorAll('.tabs .tab');
@@ -4269,11 +4288,16 @@ function applyEditPermission(){
   }
   if(isAdmin) return; // admin can edit everything
 
-  // Get editable_tabs from current user
+  // Priority 1: ใช้ editableTabs จาก auth response
+  // Priority 2: fallback ดูจาก DB.employees
   var editableTabs = '';
-  if(DB.employees && Array.isArray(DB.employees)){
-    var me = DB.employees.find(function(e){ return e.name === CURRENT_USER || e.email === CURRENT_USER; });
-    if(me && me.editableTabs) editableTabs = me.editableTabs;
+  if(CURRENT_USER_EDITABLE_TABS !== null && CURRENT_USER_EDITABLE_TABS !== undefined){
+    editableTabs = CURRENT_USER_EDITABLE_TABS;
+  } else if(DB.employees && Array.isArray(DB.employees)){
+    var me = DB.employees.find(function(e){
+      return (e.name && e.name === CURRENT_USER) || (e.email && e.email === CURRENT_USER);
+    });
+    if(me && (me.editableTabs !== null && me.editableTabs !== undefined)) editableTabs = me.editableTabs;
   }
   if(!editableTabs) return; // empty = all editable
 
