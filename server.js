@@ -509,7 +509,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
         } else {
           await client.query(
             'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
-            [emp.name||'', emp.email||'', emp.brands||'', emp.note||'', emp.isAdmin||false, 'approved']
+            [emp.name||'', emp.email||'', emp.brands||'', emp.note||'', emp.isAdmin||false, 'pending']
           );
         }
       }
@@ -677,10 +677,10 @@ app.put('/api/employees', requireAuth, async (req, res) => {
           [e.name||'', e.brands||'', e.note||'', e.isAdmin||false, ex.id]
         );
       } else {
-        // Insert new — status=approved (admin added them manually)
+        // Insert new — status=pending (ต้องอนุมัติแยกต่างหาก)
         await client.query(
           'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
-          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, 'approved']
+          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, 'pending']
         );
       }
     }
