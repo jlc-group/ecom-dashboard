@@ -173,12 +173,20 @@ app.post('/api/auth/google', async (req, res) => {
 
     // User exists — update google_id and picture if needed
     emp = result.rows[0];
-    if (!emp.google_id || !emp.picture) {
+    var isFirstGoogleLogin = !emp.google_id;
+    if (isFirstGoogleLogin || !emp.picture) {
       await pool.query(
         'UPDATE employees SET google_id = COALESCE(google_id, $1), picture = COALESCE(picture, $2) WHERE id = $3',
         [googleId, picture, emp.id]
       );
     }
+
+    // ถ้า login ผ่าน Google ครั้งแรก (ยังไม่มี google_id) และไม่ใช่ admin → ต้องรออนุมัติ
+    if (isFirstGoogleLogin && !emp.is_admin && !AUTO_APPROVE_USERS) {
+      await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['pending', emp.id]);
+      emp.status = 'pending';
+    }
+
     emp = rowToCamel(emp);
 
     // Check approval status — ต้องเป็น 'approved' เท่านั้นถึงจะเข้าได้
