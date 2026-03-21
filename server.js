@@ -55,7 +55,7 @@ function rowToSnake(obj) {
 const TEXT_COLS = new Set(['date', 'brand', 'month', 'employee', 'task', 'detail', 'status',
   'start_date', 'due', 'note', 'name', 'email', 'brands', 'action', 'platform',
   'data_date', 'field', 'old_val', 'new_val', 'user', 'user_name', 'ts', 'due_date',
-  'google_id', 'picture', 'visible_tabs']);
+  'google_id', 'picture', 'visible_tabs', 'editable_tabs']);
 
 // Convert empty strings to null for numeric columns
 function cleanVal(col, val) {
@@ -100,7 +100,7 @@ async function issueJwtForEmployee(res, employeeId) {
   }
   const freshEmp = rowToCamel(freshRow.rows[0]);
   const token = jwt.sign(
-    { sub: freshEmp.id, email: freshEmp.email, name: freshEmp.name, isAdmin: freshEmp.isAdmin, visibleTabs: freshEmp.visible_tabs || '' },
+    { sub: freshEmp.id, email: freshEmp.email, name: freshEmp.name, isAdmin: freshEmp.isAdmin, visibleTabs: freshEmp.visibleTabs || '', editableTabs: freshEmp.editableTabs || '' },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
@@ -218,7 +218,7 @@ app.get('/api/admin/pending-users', requireAuth, async function(req, res) {
 app.get('/api/admin/all-users', requireAuth, async function(req, res) {
   try {
     var result = await pool.query(
-      'SELECT id, name, email, picture, status, is_admin, google_id, visible_tabs FROM employees ORDER BY id'
+      'SELECT id, name, email, picture, status, is_admin, google_id, visible_tabs, editable_tabs FROM employees ORDER BY id'
     );
     res.json(result.rows.map(rowToCamel));
   } catch (err) {
@@ -260,6 +260,22 @@ app.post('/api/admin/set-visible-tabs', requireAuth, async function(req, res) {
   }
 });
 
+// POST /api/admin/set-editable-tabs — Admin: set which tabs a user can edit
+app.post('/api/admin/set-editable-tabs', requireAuth, async function(req, res) {
+  try {
+    var userId = req.body.userId;
+    var editableTabs = req.body.editableTabs || ''; // comma-separated tab keys, empty = all
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+    await pool.query('UPDATE employees SET editable_tabs = $1 WHERE id = $2', [editableTabs, userId]);
+    res.json({ success: true, userId: userId, editableTabs: editableTabs });
+  } catch (err) {
+    console.error('POST /api/admin/set-editable-tabs error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/auth/me — verify JWT, return user info
 app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -287,14 +303,14 @@ app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog, forecast, configRows] = await Promise.all([
       pool.query('SELECT code, name, target_nm FROM brands ORDER BY name'),
-      pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
+      pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
       pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index'),
-      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time')"),
+      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','forecast_platforms','brand_plat_map')"),
     ]);
 
     // Build brandTargets & brandNames from brands table
@@ -305,16 +321,29 @@ app.get('/api/data', requireAuth, async (req, res) => {
       brandNames[r.code] = r.name || r.code;
     });
 
-    // Build forecastGMV from forecast table
+    // Build forecastGMV from forecast table (dynamic platforms)
     var forecastGMV = {};
     forecast.rows.forEach(function(r){
-      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {tt:Array(12).fill(0), sp:Array(12).fill(0), lz:Array(12).fill(0)};
-      if(forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
+      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {};
+      if(!forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform] = Array(12).fill(0);
+      forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
     });
 
     // Build LINE config from config table
     var configMap = {};
     configRows.rows.forEach(function(r){ configMap[r.key] = r.value; });
+
+    // Parse forecast platforms (default to TT/SP/LZ)
+    var forecastPlatforms = null;
+    try { forecastPlatforms = JSON.parse(configMap['forecast_platforms'] || 'null'); } catch(e){}
+    if(!Array.isArray(forecastPlatforms) || forecastPlatforms.length === 0) {
+      forecastPlatforms = [{k:'tt',label:'TikTok',color:'#ff6b6b'},{k:'sp',label:'Shopee',color:'#ffa94d'},{k:'lz',label:'Lazada',color:'#a78bfa'}];
+    }
+
+    // Parse brand-platform mapping
+    var brandPlatMap = null;
+    try { brandPlatMap = JSON.parse(configMap['brand_plat_map'] || 'null'); } catch(e){}
+    if(!brandPlatMap || typeof brandPlatMap !== 'object') brandPlatMap = {};
 
     res.json({
       brands:       brands.rows.map(r => r.code),
@@ -327,9 +356,13 @@ app.get('/api/data', requireAuth, async (req, res) => {
       apmTasks:     apmTasks.rows.map(rowToCamel),
       auditLog:     auditLog.rows.map(rowToCamel),
       forecastGMV:  forecastGMV,
+      forecastPlatforms: forecastPlatforms,
+      brandPlatMap: brandPlatMap,
       lineToken:    configMap['line_token'] || '',
       lineGroup:    configMap['line_group'] || '',
       lineSendTime: configMap['line_send_time'] || '09:00',
+      lineSumSendTime: configMap['line_sum_send_time'] || '',
+      lineBrandSendTime: configMap['line_brand_send_time'] || '',
     });
   } catch (err) {
     console.error('GET /api/data error:', err);
@@ -363,15 +396,25 @@ app.put('/api/data', requireAuth, async (req, res) => {
       }
     }
 
-    // --- Forecast GMV ---
+    // --- Forecast Platforms (save to config) ---
+    if (Array.isArray(db.forecastPlatforms)) {
+      await client.query("INSERT INTO config (key, value) VALUES ('forecast_platforms', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.forecastPlatforms)]);
+    }
+
+    // --- Brand-Platform Mapping (save to config) ---
+    if (db.brandPlatMap && typeof db.brandPlatMap === 'object') {
+      await client.query("INSERT INTO config (key, value) VALUES ('brand_plat_map', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.brandPlatMap)]);
+    }
+
+    // --- Forecast GMV (dynamic platforms) ---
     if (db.forecastGMV && typeof db.forecastGMV === 'object') {
       await client.query('DELETE FROM forecast');
       var fcBrands = Object.keys(db.forecastGMV);
       for (var fi = 0; fi < fcBrands.length; fi++) {
         var fcBrand = fcBrands[fi];
-        var fcPlats = ['tt','sp','lz'];
-        for (var pi = 0; pi < fcPlats.length; pi++) {
-          var fcPlat = fcPlats[pi];
+        var platKeys = Object.keys(db.forecastGMV[fcBrand]);
+        for (var pi = 0; pi < platKeys.length; pi++) {
+          var fcPlat = platKeys[pi];
           var vals = db.forecastGMV[fcBrand][fcPlat];
           if (!Array.isArray(vals)) continue;
           for (var mi = 0; mi < vals.length; mi++) {
@@ -392,6 +435,12 @@ app.put('/api/data', requireAuth, async (req, res) => {
     }
     if (db.lineSendTime !== undefined) {
       await client.query("INSERT INTO config (key, value) VALUES ('line_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSendTime || '09:00']);
+    }
+    if (db.lineSumSendTime !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_sum_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSumSendTime || '']);
+    }
+    if (db.lineBrandSendTime !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_brand_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineBrandSendTime || '']);
     }
 
     // --- Employees (preserve google_id, status, picture) ---
@@ -543,7 +592,7 @@ app.put('/api/brands', requireAuth, async (req, res) => {
 // ============================================================
 app.get('/api/employees', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']);
+    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']);
     res.json(rows.map(rowToCamel));
   } catch (err) {
     console.error('GET /api/employees error:', err.message);
@@ -558,7 +607,7 @@ app.put('/api/employees', requireAuth, async (req, res) => {
     // UPSERT: update existing by email, insert new ones — preserve google_id, status, picture
     var employees = req.body.employees || [];
     // Get existing employees to preserve auth fields
-    var existing = await client.query('SELECT id, email, google_id, status, picture, visible_tabs FROM employees');
+    var existing = await client.query('SELECT id, email, google_id, status, picture, visible_tabs, editable_tabs FROM employees');
     var existingMap = {};
     existing.rows.forEach(function(r){ if(r.email) existingMap[r.email.toLowerCase()] = r; });
 
@@ -680,8 +729,9 @@ app.get('/api/forecast', requireAuth, async (req, res) => {
     var { rows } = await pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index');
     var forecastGMV = {};
     rows.forEach(function(r){
-      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {tt:Array(12).fill(0), sp:Array(12).fill(0), lz:Array(12).fill(0)};
-      if(forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
+      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {};
+      if(!forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform] = Array(12).fill(0);
+      forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
     });
     res.json(forecastGMV);
   } catch (err) {
@@ -698,7 +748,7 @@ app.put('/api/forecast', requireAuth, async (req, res) => {
     var fcBrands = Object.keys(data);
     for (var fi = 0; fi < fcBrands.length; fi++) {
       var brand = fcBrands[fi];
-      var plats = ['tt','sp','lz'];
+      var plats = Object.keys(data[brand]);
       for (var pi = 0; pi < plats.length; pi++) {
         var plat = plats[pi];
         var vals = data[brand][plat];
@@ -780,6 +830,443 @@ app.put('/api/config/:key', requireAuth, async (req, res) => {
       [key, value]
     );
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// LINE Schedule — ให้ภายนอก (Apps Script / cron) ดึงตารางส่ง
+// ============================================================
+app.get('/api/line/schedule', async (req, res) => {
+  try {
+    // ดึง config ที่เกี่ยวข้อง
+    var { rows: cfgRows } = await pool.query(
+      "SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_sum_send_time','line_brand_send_time','line_custom_msgs','line_templates','forecast_platforms','brand_plat_map')"
+    );
+    var cfg = {};
+    cfgRows.forEach(function(r){ cfg[r.key] = r.value; });
+
+    // ดึงข้อมูลทั้งหมด
+    var [brandsRes, tt, sp, lz, fcRes] = await Promise.all([
+      pool.query('SELECT code, name, target_nm FROM brands ORDER BY name'),
+      pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
+      pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
+      pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
+      pool.query('SELECT brand, platform, month_index, value FROM forecast'),
+    ]);
+
+    var today = new Date();
+    var yyyy = today.getFullYear();
+    var mm = String(today.getMonth()+1).padStart(2,'0');
+    var dd = String(today.getDate()).padStart(2,'0');
+    var todayStr = yyyy + '-' + mm + '-' + dd;
+    var monthPrefix = yyyy + '-' + mm;
+    var mi = today.getMonth(); // 0-indexed
+    var daysInMonth = new Date(yyyy, mi+1, 0).getDate();
+    var daysRemain = daysInMonth - today.getDate();
+    var thMonths = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    var dateLabel = today.getDate() + ' ' + thMonths[mi+1] + ' ' + (yyyy + 543);
+    var monthName = thMonths[mi+1];
+
+    // FC platforms
+    var fcPlat = [{k:'tt',label:'TikTok'},{k:'sp',label:'Shopee'},{k:'lz',label:'Lazada'}];
+    try { var fp = JSON.parse(cfg['forecast_platforms']||'null'); if(Array.isArray(fp)&&fp.length) fcPlat=fp; } catch(e){}
+    var brandPlatMap = {};
+    try { var bpm = JSON.parse(cfg['brand_plat_map']||'null'); if(bpm&&typeof bpm==='object') brandPlatMap=bpm; } catch(e){}
+
+    // Build forecast lookup
+    var forecastGMV = {};
+    fcRes.rows.forEach(function(r){
+      if(!forecastGMV[r.brand]) forecastGMV[r.brand] = {};
+      if(!forecastGMV[r.brand][r.platform]) forecastGMV[r.brand][r.platform] = [];
+      forecastGMV[r.brand][r.platform][r.month_index] = parseFloat(r.value)||0;
+    });
+
+    // Tag rows with platform
+    var allTagged = [];
+    tt.rows.forEach(function(r){ allTagged.push(Object.assign({}, r, {_plat:'tt'})); });
+    sp.rows.forEach(function(r){ allTagged.push(Object.assign({}, r, {_plat:'sp'})); });
+    lz.rows.forEach(function(r){ allTagged.push(Object.assign({}, r, {_plat:'lz'})); });
+
+    // Ads calculator (ads only — for ROAS)
+    function calcAds(r){
+      var n = function(k){ return parseFloat(r[k])||0; };
+      if(r._plat==='tt') return n('cost_gmv_ads')+n('cost_gmv_live');
+      if(r._plat==='sp') return n('sp_ads')+n('fb_cpas')+n('affiliate')+n('search_ads')+n('shop_ads')+n('product_ads');
+      if(r._plat==='lz') return n('lzsd')+n('lz_gmv_max')+n('aff_lz');
+      return 0;
+    }
+
+    // MK cost calculator (ไม่รวม cogs, plat_fee — for MK%)
+    function calcTotalCost(r){
+      var n = function(k){ return parseFloat(r[k])||0; };
+      if(r._plat==='tt') return n('promo')+n('free')+n('kol')+n('prod_live')+n('comm_live')+n('comm_creator')+n('cost_gmv_ads')+n('cost_gmv_live');
+      if(r._plat==='sp') return n('promo')+n('free')+n('comm_creator')+n('sp_ads')+n('fb_cpas')+n('affiliate')+n('search_ads')+n('shop_ads')+n('product_ads');
+      if(r._plat==='lz') return n('promo')+n('free')+n('comm_creator')+n('lzsd')+n('lz_gmv_max')+n('aff_lz');
+      return 0;
+    }
+
+    // Sum rows helper
+    function sumRows(rows){
+      var gmv=0,orders=0,ads=0,totalCost=0,nm=0;
+      var byPlat={tt:{gmv:0,ads:0},sp:{gmv:0,ads:0},lz:{gmv:0,ads:0}};
+      var byBrand={};
+      rows.forEach(function(r){
+        var g=parseFloat(r.gmv)||0, o=parseFloat(r.orders)||0, a=calcAds(r), tc=calcTotalCost(r), n=parseFloat(r.nm)||0;
+        gmv+=g; orders+=o; ads+=a; totalCost+=tc; nm+=n;
+        if(byPlat[r._plat]){ byPlat[r._plat].gmv+=g; byPlat[r._plat].ads+=a; }
+        var b=r.brand;
+        if(b){
+          if(!byBrand[b]) byBrand[b]={gmv:0,orders:0,ads:0,totalCost:0,nm:0};
+          byBrand[b].gmv+=g; byBrand[b].orders+=o; byBrand[b].ads+=a; byBrand[b].totalCost+=tc; byBrand[b].nm+=n;
+        }
+      });
+      return {gmv:gmv,orders:orders,ads:ads,totalCost:totalCost,nm:nm,byPlat:byPlat,byBrand:byBrand};
+    }
+
+    var todayRows = allTagged.filter(function(r){ return String(r.date||'').substring(0,10)===todayStr; });
+    var monthRows = allTagged.filter(function(r){ return String(r.date||'').substring(0,7)===monthPrefix; });
+
+    var todayData = sumRows(todayRows);
+    var monthData = sumRows(monthRows);
+
+    // Days passed (unique dates with data)
+    var uniqueDates = {};
+    monthRows.forEach(function(r){ uniqueDates[String(r.date||'').substring(0,10)]=1; });
+    var daysPassed = Object.keys(uniqueDates).length || 1;
+    var monthAvg = monthData.gmv / daysPassed;
+
+    // FC target
+    var brandList = brandsRes.rows.map(function(b){ return b.code; });
+    var fcTarget = 0;
+    var brandFc = {};
+    brandList.forEach(function(b){
+      var bTarget = 0;
+      var plats = (brandPlatMap[b] && brandPlatMap[b].length>0) ? fcPlat.filter(function(pp){ return brandPlatMap[b].indexOf(pp.k)>=0; }) : fcPlat;
+      plats.forEach(function(pl){
+        if(forecastGMV[b] && forecastGMV[b][pl.k] && forecastGMV[b][pl.k][mi]) bTarget += forecastGMV[b][pl.k][mi];
+      });
+      brandFc[b] = bTarget;
+      fcTarget += bTarget;
+    });
+    var fcPct = fcTarget>0 ? (monthData.gmv/fcTarget*100) : 0;
+    var fcGap = Math.max(0, fcTarget - monthData.gmv);
+    var fcDailyNeed = daysRemain>0 ? fcGap/daysRemain : 0;
+    var todayRoas = todayData.ads>0 ? todayData.gmv/todayData.ads : 0;
+    var monthRoas = monthData.ads>0 ? monthData.gmv/monthData.ads : 0;
+
+    // Progress bar
+    var pctClamped = Math.min(100, fcPct);
+    var filled = Math.round(pctClamped/10);
+    var fcBar = '';
+    for(var i=0;i<filled;i++) fcBar+='█';
+    for(var j=filled;j<10;j++) fcBar+='░';
+
+    // Motivation
+    var motivation = '';
+    if(fcPct >= 100) motivation = '🏆 ยอดเยี่ยม! ทะลุเป้าแล้ว! ไปต่อกันเลย! 💪🔥';
+    else if(fcPct >= 80) motivation = '🔥 ใกล้มาก! เหลือแค่นิดเดียว สู้ๆ! 💪';
+    else if(fcPct >= 60) motivation = '💪 กำลังไปได้ดี ยังพอไหว ลุยต่อ!';
+    else if(fcPct >= 40) motivation = '⚡ ต้องเร่งมือหน่อยนะ ยังมีเวลา!';
+    else motivation = '🚀 ต้องเพิ่มเต็มกำลัง เร่งเครื่องเลย!';
+
+    // Platform daily rows
+    var platColors = {tt:'🔴',sp:'🟠',lz:'🟣'};
+    var platDailyRows = fcPlat.map(function(pl){
+      var tg = (todayData.byPlat[pl.k]||{}).gmv||0;
+      var mg = (monthData.byPlat[pl.k]||{}).gmv||0;
+      var icon = platColors[pl.k]||'⚪';
+      return icon+' '+pl.label+': ฿'+Math.round(tg).toLocaleString()+' (วันนี้) | ฿'+Math.round(mg).toLocaleString()+' (เดือน)';
+    }).join('\n');
+
+    var fmtN = function(v){ return Math.round(v).toLocaleString(); };
+    var nmTarget = 8.5, roasTarget = 3, mkTarget = 40;
+    var nmPct = monthData.gmv>0 ? (monthData.nm/monthData.gmv*100) : 0;
+
+    // MK% calculations (using totalCost, not just ads)
+    var todayMkPct = todayData.gmv>0 ? (todayData.totalCost/todayData.gmv*100) : 0;
+    var monthMkPct = monthData.gmv>0 ? (monthData.totalCost/monthData.gmv*100) : 0;
+
+    // MK warnings per brand
+    var mkOverBrands = brandList.filter(function(b){
+      var bm = monthData.byBrand[b];
+      return bm && bm.gmv>0 && (bm.totalCost/bm.gmv*100)>mkTarget;
+    });
+    var mkWarnings = '';
+    if(mkOverBrands.length>0){
+      mkWarnings = '🚨 MK% เกินเป้า (>' + mkTarget + '%):\n' + mkOverBrands.map(function(b){
+        var bm = monthData.byBrand[b];
+        return '⚠️ ' + b + ' → MK ' + (bm.totalCost/bm.gmv*100).toFixed(1) + '%';
+      }).join('\n');
+    } else if(monthData.gmv>0){
+      mkWarnings = '✅ ทุกแบรนด์ MK% อยู่ในเป้า!';
+    }
+
+    // All vars
+    var vars = {
+      '{date}': dateLabel, '{month_name}': monthName,
+      '{days_passed}': String(daysPassed), '{days_remain}': String(daysRemain),
+      '{today_gmv}': fmtN(todayData.gmv), '{today_orders}': fmtN(todayData.orders),
+      '{today_ads}': fmtN(todayData.ads), '{today_roas}': todayRoas.toFixed(1),
+      '{today_roas_status}': todayRoas>=roasTarget?'✅':'⚠️',
+      '{today_mk_pct}': todayMkPct.toFixed(1),
+      '{today_mk_status}': todayMkPct<=mkTarget?'✅':'🔴',
+      '{month_gmv}': fmtN(monthData.gmv), '{month_orders}': fmtN(monthData.orders),
+      '{month_ads}': fmtN(monthData.ads), '{month_avg}': fmtN(Math.round(monthAvg)),
+      '{month_roas}': monthRoas.toFixed(1),
+      '{month_mk_pct}': monthMkPct.toFixed(1),
+      '{month_mk_status}': monthMkPct<=mkTarget?'✅':'🔴',
+      '{mk_warnings}': mkWarnings, '{mk_target}': String(mkTarget),
+      '{fc_target}': fmtN(fcTarget), '{fc_pct}': fcPct.toFixed(1),
+      '{fc_gap}': fmtN(Math.round(fcGap)), '{fc_daily_need}': fmtN(Math.round(fcDailyNeed)),
+      '{fc_bar}': fcBar, '{motivation}': motivation,
+      '{plat_daily_rows}': platDailyRows,
+      // Legacy compat
+      '{gmv}': fmtN(monthData.gmv), '{orders}': fmtN(monthData.orders),
+      '{ads}': fmtN(monthData.ads), '{roas}': monthRoas.toFixed(1),
+      '{roas_status}': monthRoas>=roasTarget?'✅':'⚠️',
+      '{tt_gmv}': fmtN((monthData.byPlat.tt||{}).gmv||0),
+      '{sp_gmv}': fmtN((monthData.byPlat.sp||{}).gmv||0),
+      '{lz_gmv}': fmtN((monthData.byPlat.lz||{}).gmv||0),
+      '{nm_target}': String(nmTarget), '{roas_target}': String(roasTarget),
+      '{nm_pct}': nmPct.toFixed(1), '{nm_status}': nmPct>=nmTarget?'✅':'⚠️',
+    };
+
+    function applyVars(text) {
+      if (!text) return '';
+      Object.keys(vars).forEach(function(k) { text = text.split(k).join(vars[k]); });
+      return text;
+    }
+
+    // Parse templates
+    var templates = {};
+    try { templates = JSON.parse(cfg['line_templates'] || '{}'); } catch(e) {}
+
+    // ── Build Flex Messages (server-side) ──
+    var roasTarget = 3;
+    function mkClr(p){ return p<=mkTarget?'#00C853':'#FF5252'; }
+    function roasClr(v){ return v>=roasTarget?'#00C853':'#FFC107'; }
+    function fcClr(p){ return p>=100?'#00C853':p>=70?'#4CAF50':p>=40?'#FFC107':'#FF5252'; }
+    function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:'#AAAAAA',flex:3},{type:'text',text:val,size:'sm',color:color||'#FFFFFF',weight:'bold',align:'end',flex:4}]}; }
+
+    // Progress bar helper
+    function makeBar(pct,color){
+      var filled = Math.min(10,Math.round(Math.min(100,pct)/10));
+      var boxes = [];
+      for(var bi=0;bi<10;bi++) boxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:bi<filled?(color||'#00C853'):'#444444',cornerRadius:'2px'});
+      return {type:'box',layout:'horizontal',spacing:'xs',margin:'sm',contents:boxes};
+    }
+
+    // Platform rows for flex
+    var pColors = {tt:'#FF5252',sp:'#FF9800',lz:'#B388FF'};
+    var platFlexRows = fcPlat.map(function(pl){
+      var tg = ((todayData.byPlat[pl.k])||{}).gmv||0;
+      var mg = ((monthData.byPlat[pl.k])||{}).gmv||0;
+      return {type:'box',layout:'horizontal',contents:[
+        {type:'text',text:pl.label,size:'sm',color:pColors[pl.k]||'#AAAAAA',flex:2},
+        {type:'text',text:'฿'+fmtN(tg),size:'sm',color:'#FFFFFF',align:'end',flex:3},
+        {type:'text',text:'฿'+fmtN(mg),size:'sm',color:'#AAAAAA',align:'end',flex:3}
+      ],margin:'sm'};
+    });
+
+    var sumFlex = {
+      type:'bubble',size:'mega',
+      styles:{header:{backgroundColor:'#1A237E'},body:{backgroundColor:'#1B1B1B'}},
+      header:{type:'box',layout:'vertical',contents:[
+        {type:'text',text:'📊 JLC ALL ONLINE Daily Report',size:'lg',weight:'bold',color:'#FFFFFF'},
+        {type:'text',text:dateLabel,size:'sm',color:'#B0BEC5',margin:'xs'}
+      ],paddingAll:'16px'},
+      body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'16px',contents:[
+        {type:'text',text:'📅 ยอดวันนี้',weight:'bold',color:'#00C853',size:'sm'},
+        {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+          hRow('GMV','฿'+fmtN(todayData.gmv)),
+          hRow('Ads','฿'+fmtN(todayData.ads)), hRow('MK%',todayMkPct.toFixed(1)+'%',mkClr(todayMkPct)),
+          hRow('ROAS',todayRoas.toFixed(1)+'x',roasClr(todayRoas))
+        ]},
+        {type:'separator',color:'#444444'},
+        {type:'text',text:'📆 สะสมเดือน '+monthName+' ('+daysPassed+' วัน)',weight:'bold',color:'#42A5F5',size:'sm'},
+        {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+          hRow('GMV สะสม','฿'+fmtN(monthData.gmv)), hRow('เฉลี่ย/วัน','฿'+fmtN(Math.round(monthAvg)),'#42A5F5'),
+          hRow('Ads สะสม','฿'+fmtN(monthData.ads)),
+          hRow('MK%',monthMkPct.toFixed(1)+'%',mkClr(monthMkPct))
+        ]},
+        {type:'separator',color:'#444444'},
+        {type:'text',text:'🎯 เป้า FC: ฿'+fmtN(fcTarget),weight:'bold',color:'#FFC107',size:'sm'},
+        makeBar(fcPct),
+        {type:'box',layout:'horizontal',margin:'xs',contents:[
+          {type:'text',text:'ทำได้ '+fcPct.toFixed(1)+'%',size:'xs',color:fcClr(fcPct)},
+          {type:'text',text:'ขาด ฿'+fmtN(Math.round(fcGap)),size:'xs',color:'#FF5252',align:'end'}
+        ]},
+        {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmtN(Math.round(fcDailyNeed))+' (เหลือ '+daysRemain+' วัน)',size:'xs',color:'#AAAAAA',margin:'xs'},
+        {type:'separator',color:'#444444'},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'ช่องทาง',size:'xs',color:'#AAAAAA',flex:2},
+          {type:'text',text:'วันนี้',size:'xs',color:'#AAAAAA',align:'end',flex:3},
+          {type:'text',text:'เดือน',size:'xs',color:'#AAAAAA',align:'end',flex:3}
+        ]}
+      ].concat(platFlexRows).concat([
+        {type:'separator',color:'#444444'},
+        {type:'text',text:motivation,size:'sm',color:'#00C853',wrap:true,align:'center',margin:'sm'}
+      ])}
+    };
+
+    // Brand Flex — Carousel (1 bubble per brand)
+    var lineBrandOrder = ["JH-ECOM","JARVIT","J-DENT"];
+    var brandHeaderColors = {"jh-ecom":'#1B5E20','jarvit':'#E91E63','j-dent':'#388E3C'};
+    var defaultHeaderColors = ['#4A148C','#1A237E','#004D40','#BF360C','#1B5E20','#F57F17'];
+    // Sort brands by preferred order
+    var sortedBrandList = lineBrandOrder.filter(function(ob){ return brandList.find(function(bl){ return bl.toLowerCase()===ob.toLowerCase(); }); });
+    brandList.forEach(function(bl){ if(!sortedBrandList.find(function(s){ return s.toLowerCase()===bl.toLowerCase(); })) sortedBrandList.push(bl); });
+    var brandBubbles = [];
+    var hColorIdx = 0;
+    sortedBrandList.forEach(function(b){
+      var bM = monthData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0};
+      var bT = todayData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0};
+      var bGmv=(bM||{}).gmv||0, bTG=(bT||{}).gmv||0, bAds=(bM||{}).ads||0;
+      var bTotalCost=(bM||{}).totalCost||0;
+      var bRoas=bAds>0?bGmv/bAds:0, bFT=brandFc[b]||0;
+      var bFP=bFT>0?(bGmv/bFT*100):0, bFG=Math.max(0,bFT-bGmv), bMk=bGmv>0?(bTotalCost/bGmv*100):0;
+      var icon=bFP>=100?'🏆':bFP>=70?'🟢':bFP>=40?'🟡':'🔴';
+      var bDailyNeed = daysRemain>0 ? bFG/daysRemain : 0;
+      var hClr = brandHeaderColors[b.toLowerCase()] || defaultHeaderColors[hColorIdx % defaultHeaderColors.length];
+      hColorIdx++;
+
+      brandBubbles.push({
+        type:'bubble',size:'kilo',
+        styles:{header:{backgroundColor:hClr},body:{backgroundColor:'#1B1B1B'}},
+        header:{type:'box',layout:'vertical',contents:[
+          {type:'text',text:icon+' '+b,size:'lg',weight:'bold',color:'#FFFFFF'},
+          {type:'text',text:dateLabel,size:'xs',color:'#B0BEC5',margin:'xs'}
+        ],paddingAll:'14px'},
+        body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',contents:[
+          {type:'text',text:'📅 วันนี้',weight:'bold',color:'#00C853',size:'xs'},
+          hRow('GMV','฿'+fmtN(bTG)),
+          {type:'separator',color:'#444444'},
+          {type:'text',text:'📆 เดือน '+monthName,weight:'bold',color:'#42A5F5',size:'xs'},
+          hRow('GMV สะสม','฿'+fmtN(bGmv)),
+          hRow('Ads','฿'+fmtN(bAds)), hRow('MK%',bMk.toFixed(1)+'%',mkClr(bMk)),
+          hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=roasTarget?'#00C853':'#FFC107'),
+          {type:'separator',color:'#444444'},
+          {type:'text',text:'🎯 FC: ฿'+fmtN(bFT),weight:'bold',color:'#FFC107',size:'xs'},
+          makeBar(bFP,fcClr(bFP)),
+          {type:'box',layout:'horizontal',contents:[
+            {type:'text',text:bFP.toFixed(1)+'%',size:'xs',color:fcClr(bFP),weight:'bold'},
+            {type:'text',text:'ขาด ฿'+fmtN(bFG),size:'xs',color:'#FF5252',align:'end'}
+          ]},
+          {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmtN(Math.round(bDailyNeed)),size:'xs',color:'#AAAAAA'}
+        ]}
+      });
+    });
+
+    var brandFlex = { type:'carousel', contents: brandBubbles };
+
+    // Build schedule array
+    var schedule = [];
+
+    // 1) Summary Report (Flex)
+    schedule.push({
+      id: 'summary',
+      name: 'Summary Report',
+      sendTime: cfg['line_sum_send_time'] || '09:00',
+      messageType: 'flex',
+      altText: 'JLC ALL ONLINE Daily Report — ' + dateLabel,
+      flex: sumFlex
+    });
+
+    // 2) Per-Brand Report (Flex)
+    schedule.push({
+      id: 'per_brand',
+      name: 'Per-Brand Report',
+      sendTime: cfg['line_brand_send_time'] || '09:00',
+      messageType: 'flex',
+      altText: 'Brand Report — ' + dateLabel,
+      flex: brandFlex
+    });
+
+    // 3) Custom messages
+    var customMsgs = [];
+    try { customMsgs = JSON.parse(cfg['line_custom_msgs'] || '[]'); } catch(e) {}
+    customMsgs.forEach(function(m) {
+      var text = m.type === 'template' ? applyVars(m.content || '') : (m.content || '');
+      schedule.push({
+        id: m.id,
+        name: m.name || 'Custom',
+        sendTime: m.sendTime || '09:00',
+        type: m.type,
+        message: text
+      });
+    });
+
+    res.json({
+      lineToken: cfg['line_token'] || '',
+      lineGroup: cfg['line_group'] || '',
+      schedule: schedule
+    });
+  } catch (err) {
+    console.error('GET /api/line/schedule error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/line/send — ส่ง LINE message จริงผ่าน LINE Messaging API
+app.post('/api/line/send', requireAuth, async (req, res) => {
+  try {
+    var { rows: cfgRows } = await pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group')");
+    var cfg = {};
+    cfgRows.forEach(function(r){ cfg[r.key] = r.value; });
+
+    var token = req.body.token || cfg['line_token'];
+    var groupId = req.body.groupId || cfg['line_group'];
+    var message = req.body.message;      // text message
+    var flexContent = req.body.flex;       // flex JSON content
+    var altText = req.body.altText || 'ECOM Report';
+
+    if (!token) return res.status(400).json({ error: 'LINE token not configured' });
+    if (!groupId) return res.status(400).json({ error: 'LINE group ID not configured' });
+    if (!message && !flexContent) return res.status(400).json({ error: 'message or flex required' });
+
+    // Build LINE message object
+    var lineMsg;
+    if (flexContent) {
+      // Flex Message
+      lineMsg = { type: 'flex', altText: altText, contents: flexContent };
+    } else {
+      // Text Message
+      lineMsg = { type: 'text', text: message };
+    }
+
+    // Call LINE Push Message API
+    var https = require('https');
+    var postData = JSON.stringify({
+      to: groupId,
+      messages: [lineMsg]
+    });
+    var result = await new Promise(function(resolve, reject) {
+      var req2 = https.request({
+        hostname: 'api.line.me',
+        path: '/v2/bot/message/push',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, function(resp) {
+        var body = '';
+        resp.on('data', function(c) { body += c; });
+        resp.on('end', function() { resolve({ status: resp.statusCode, body: body }); });
+      });
+      req2.on('error', reject);
+      req2.write(postData);
+      req2.end();
+    });
+
+    if (result.status === 200) {
+      res.json({ success: true, message: 'ส่งสำเร็จ!' });
+    } else {
+      res.json({ success: false, status: result.status, error: result.body });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

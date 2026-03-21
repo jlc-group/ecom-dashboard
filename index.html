@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ECOM TEAM Dashboard</title>
+<title>JLC ALL ONLINE Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -19,7 +19,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* HEADER */
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;}
 .logo{display:flex;align-items:center;gap:10px;}
-.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--green));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-icon{width:36px;height:36px;border-radius:6px;overflow:hidden;flex-shrink:0;background:#fff;padding:2px;}
 .logo h1{font-size:16px;font-weight:700;}
 .logo p{font-size:11px;color:var(--muted);}
 .header-actions{display:flex;gap:8px;align-items:center;}
@@ -123,7 +123,7 @@ select.cell{padding:0 4px;cursor:pointer;}
 /* LOGIN SCREEN */
 #loginScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;flex-direction:column;}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;}
-.login-logo{width:60px;height:60px;background:linear-gradient(135deg,var(--accent),var(--green));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+.login-logo{width:60px;height:60px;border-radius:14px;overflow:hidden;margin:0 auto 16px;background:#fff;padding:3px;}
 .login-title{font-size:20px;font-weight:700;margin-bottom:4px;}
 .login-sub{font-size:13px;color:var(--muted);margin-bottom:32px;}
 .login-error{color:var(--red);font-size:13px;margin-top:16px;display:none;}
@@ -290,16 +290,70 @@ input[type=number]{-moz-appearance:textfield;}
 .p-high{color:#ff6b6b;font-weight:700;}
 .p-med{color:#ffd166;}
 .p-low{color:#00d4aa;}
+
+/* ===== CUSTOM DATE PICKER ===== */
+.dp-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;}
+.dp-overlay.show{opacity:1;}
+.dp-box{background:#1a1d2e;border-radius:16px;width:340px;max-width:92vw;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden;transform:scale(.92);transition:transform .2s;}
+.dp-overlay.show .dp-box{transform:scale(1);}
+.dp-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px;}
+.dp-header .dp-nav{width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:transparent;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.dp-header .dp-nav:hover{background:rgba(255,255,255,.08);}
+.dp-month-label{font-size:15px;font-weight:600;color:#fff;cursor:default;}
+.dp-weekdays{display:grid;grid-template-columns:repeat(7,1fr);padding:6px 14px;gap:0;}
+.dp-weekdays span{text-align:center;font-size:12px;color:rgba(255,255,255,.4);font-weight:500;padding:6px 0;}
+.dp-days{display:grid;grid-template-columns:repeat(7,1fr);padding:4px 14px 12px;gap:2px;}
+.dp-day{text-align:center;padding:9px 0;border-radius:10px;font-size:14px;color:rgba(255,255,255,.75);cursor:pointer;transition:all .12s;border:2px solid transparent;}
+.dp-day:hover{background:rgba(0,212,170,.12);}
+.dp-day.other{color:rgba(255,255,255,.2);}
+.dp-day.today{color:#00d4aa;font-weight:700;}
+.dp-day.selected{background:#00d4aa;color:#0a0c15;font-weight:700;border-color:#00d4aa;}
+.dp-day.range-sel{border:2px solid rgba(0,212,170,.5);}
+.dp-footer{display:flex;justify-content:flex-end;gap:10px;padding:10px 18px 16px;border-top:1px solid rgba(255,255,255,.06);}
+.dp-btn{padding:8px 22px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.dp-btn-cancel{background:rgba(255,255,255,.08);color:rgba(255,255,255,.6);}
+.dp-btn-cancel:hover{background:rgba(255,255,255,.14);color:#fff;}
+.dp-btn-ok{background:#00d4aa;color:#0a0c15;}
+.dp-btn-ok:hover{background:#00e6b8;}
 </style>
 </head>
 <body>
+
+<!-- WebView Detection: force open in external browser -->
+<div id="webviewWarning" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:99999;display:none;align-items:center;justify-content:center;flex-direction:column;padding:20px;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 30px;text-align:center;max-width:400px;width:90%;">
+    <div style="font-size:40px;margin-bottom:16px;">🌐</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px;">เปิดใน Browser ภายนอก</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6;">Google ไม่อนุญาตให้ Login ผ่านแอป LINE<br>กรุณากดปุ่มด้านล่างเพื่อเปิดใน Chrome/Safari</div>
+    <a id="openExternalBtn" href="" target="_blank" style="display:inline-block;background:var(--accent);color:#fff;padding:12px 28px;border-radius:8px;font-weight:600;text-decoration:none;font-size:14px;">เปิดใน Chrome / Safari</a>
+    <div style="margin-top:16px;font-size:11px;color:var(--muted);">หรือคัดลอก URL นี้ไปเปิดใน Browser เอง:</div>
+    <div id="copyUrlBox" style="margin-top:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;word-break:break-all;color:var(--text);cursor:pointer;" onclick="navigator.clipboard.writeText(window.location.href);this.textContent='✅ คัดลอกแล้ว!';setTimeout(()=>{this.textContent=window.location.href},2000)"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var ua = navigator.userAgent || '';
+  var isLineWebView = /Line\//i.test(ua);
+  var isWebView = isLineWebView || /FBAN|FBAV|Instagram|Twitter/i.test(ua);
+  if(isWebView){
+    var w = document.getElementById('webviewWarning');
+    w.style.display = 'flex';
+    document.getElementById('openExternalBtn').href = window.location.href;
+    document.getElementById('copyUrlBox').textContent = window.location.href;
+    // Try to force open in external browser (works on Android LINE)
+    if(isLineWebView){
+      try { window.open(window.location.href, '_system'); } catch(e){}
+    }
+  }
+})();
+</script>
 
 <!-- LOGIN SCREEN -->
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo">📊</div>
-    <div class="login-title">ECOM TEAM</div>
-    <div class="login-sub">เข้าสู่ระบบด้วย Google Account</div>
+    <div class="login-title">JLC ALL ONLINE</div>
+    <div class="login-sub">ระบบกรอกข้อมูลและ Dashboard</div>
     <div id="googleSignInBtn"></div>
     <div id="loginError" class="login-error"></div>
   </div>
@@ -319,9 +373,8 @@ input[type=number]{-moz-appearance:textfield;}
 <!-- HEADER -->
 <div class="header">
   <div class="logo">
-    <div class="logo-icon">📊</div>
     <div>
-      <h1>ECOM TEAM</h1>
+      <h1>JLC ALL ONLINE</h1>
       <p>ระบบกรอกข้อมูลและ Dashboard</p>
     </div>
   </div>
@@ -373,7 +426,7 @@ input[type=number]{-moz-appearance:textfield;}
   <div class="tab" onclick="showPage('daily_dash',this)">📅 Daily_Dashboard</div>
   <div class="tab" onclick="showPage('line',this)">💬 LINE_Data</div>
   <div class="tab" onclick="showPage('forecast',this)">🔮 Forecast</div>
-  <div class="tab" onclick="showPage('apm',this)">👥 APM Task</div>
+  <div class="tab" onclick="showPage('apm',this)">👥 Current Task</div>
   <div class="tab" onclick="showPage('audit',this)">🔍 Audit Log</div>
 </div>
 
@@ -424,24 +477,32 @@ input[type=number]{-moz-appearance:textfield;}
   </div>
   <div style="margin-top:14px;">
     <div class="card">
-      <div class="card-title">Platform</div>
-      <table class="sum-table">
-        <thead><tr><th>ลำดับ</th><th>รหัส</th><th>ชื่อ Platform</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>TT</td><td>TikTok</td></tr>
-          <tr><td>2</td><td>SP</td><td>Shopee</td></tr>
-          <tr><td>3</td><td>LZ</td><td>Lazada</td></tr>
-        </tbody>
+      <div class="card-title">📊 ช่องทาง Forecast
+        <button class="btn btn-primary btn-sm" onclick="addFcPlatRow()">+ เพิ่มช่องทาง</button>
+      </div>
+      <table class="sum-table" style="margin-bottom:10px;">
+        <thead><tr><th>#</th><th>รหัส</th><th>ชื่อช่องทาง</th><th>สี</th><th></th></tr></thead>
+        <tbody id="fcPlatConfigTable"></tbody>
       </table>
+      <button class="btn btn-success btn-sm" onclick="saveFcPlatConfig()" style="margin-top:8px;">💾 บันทึกช่องทาง</button>
+
+      <div style="margin-top:20px;" class="card-title">🔗 แบรนด์ × ช่องทาง
+        <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">เลือกว่าแบรนด์ไหนขายช่องทางไหนบ้าง</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="sum-table" style="margin-bottom:10px;" id="brandPlatMapTable"></table>
+      </div>
+      <button class="btn btn-success btn-sm" onclick="saveBrandPlatMap()" style="margin-top:8px;">💾 บันทึกแบรนด์×ช่องทาง</button>
+
       <div style="margin-top:16px;" class="card-title">LINE Messaging API</div>
       <table class="sum-table">
         <thead><tr><th>รายการ</th><th>ค่า</th><th>หมายเหตุ</th></tr></thead>
         <tbody>
-          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
-          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
-          <tr><td>เวลาส่ง</td><td><input id="lineSendTime" type="time" class="cell" style="width:120px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" value="09:00"></td><td style="font-size:11px;color:var(--muted)">ตั้ง Trigger ใน Apps Script</td></tr>
+          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
+          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
           <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
           <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>API ตารางส่ง</td><td><code style="font-size:11px;color:var(--accent);">/api/line/schedule</code></td><td style="font-size:11px;color:var(--muted)">ให้ Scheduler ภายนอกเรียกดึงข้อความ+เวลาส่ง</td></tr>
         </tbody>
       </table>
     </div>
@@ -683,18 +744,51 @@ input[type=number]{-moz-appearance:textfield;}
     </div>
   </div>
 
-  <!-- Preview (always visible) -->
-  <div class="g2">
-    <div class="card">
-      <div class="card-title" style="margin-bottom:10px;">📊 Summary Report</div>
-      <pre id="lineSum" style="background:#0d1f0d;border:1px solid #1d4a1d;border-radius:8px;padding:14px;font-size:12px;line-height:1.8;color:#90ee90;white-space:pre-wrap;font-family:'Courier New',monospace;"></pre>
-      <button class="btn btn-sm" style="margin-top:8px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyLineText('lineSum')">📋 Copy</button>
+  <!-- Flex Message Preview (single column) -->
+  <div>
+    <!-- Summary Report -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">📊 Summary Report (Flex Card)</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
+          <input id="lineSumTime" type="time" class="cell" value="09:00" onchange="DB.lineSumSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;">
+        <div id="lineSum" style="width:100%;max-width:400px;"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;justify-content:center;">
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyFlexJSON('summary')">📋 Copy Flex JSON</button>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title" style="margin-bottom:10px;">🏷️ Per-Brand Report</div>
-      <pre id="lineBrandMsg" style="background:#0d1f0d;border:1px solid #1d4a1d;border-radius:8px;padding:14px;font-size:12px;line-height:1.8;color:#90ee90;white-space:pre-wrap;font-family:'Courier New',monospace;"></pre>
-      <button class="btn btn-sm" style="margin-top:8px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyLineText('lineBrandMsg')">📋 Copy</button>
+
+    <!-- Per-Brand Report -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">🏷️ Brand Report (แต่ละแบรนด์)</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
+          <input id="lineBrandTime" type="time" class="cell" value="09:00" onchange="DB.lineBrandSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+        </div>
+      </div>
+      <div id="lineBrandMsg" style="display:flex;flex-direction:column;gap:16px;padding:8px 0;max-width:400px;margin:0 auto;"></div>
+      <div style="display:flex;gap:6px;margin-top:10px;justify-content:center;">
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyFlexJSON('brand')">📋 Copy Flex JSON</button>
+      </div>
     </div>
+  </div>
+
+  <!-- Custom Messages Section -->
+  <div style="margin-top:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:700;">📨 ข้อความเพิ่มเติม</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="addLineMsg('template')">+ Template</button>
+        <button class="btn btn-sm" onclick="addLineMsg('free')" style="background:#e67e22;color:#fff;">+ ข้อความอิสระ</button>
+      </div>
+    </div>
+    <div id="lineMsgList"></div>
   </div>
 </div>
 
@@ -741,7 +835,7 @@ input[type=number]{-moz-appearance:textfield;}
 
 <!-- ==================== APM TASK ==================== -->
 <div id="page-apm" class="page">
-  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">👥 APM Task — ติดตามงานทีม</div>
+  <div style="font-size:14px;font-weight:700;margin-bottom:16px;">👥 Current Task — ติดตามงานทีม</div>
 
   <!-- Employee Summary Cards -->
   <div class="apm-summary" id="apmSummary"></div>
@@ -1259,6 +1353,7 @@ async function initApp(){
     showLoadingOverlay(true,'กำลังโหลดข้อมูล...','กำลังเชื่อมต่อ API Server...');
     try {
       await loadDB();
+      loadFcPlat();
       initCurrentUser();
       genAllSheetRows();
       renderDashboard();
@@ -1267,7 +1362,9 @@ async function initApp(){
       await loadLineTemplates();
       loadUserManagement(); // Load admin user panel if admin
       applyTabVisibility(); // Hide tabs based on user permission
+      applyEditPermission(); // Disable editing on restricted tabs
       setInterval(autoSaveAPI, 120000); // autosave ทุก 2 นาที
+      window.scrollTo(0, 0); // กลับไปด้านบนสุด
     } catch(e) {
       console.error('initApp API error:', e);
       showLoadingOverlay(false);
@@ -1517,8 +1614,11 @@ function renderRow(plat, r={}, idx){
 
     if(f.t==='date'){
       const inp = document.createElement('input');
-      inp.type='date'; inp.className='cell left'; inp.dataset.field=f.k;
+      inp.type='text'; inp.readOnly=true; inp.className='cell left'; inp.dataset.field=f.k;
+      inp.dataset.datepicker='true';
       inp.value = r[f.k] || todayStr();
+      inp.style.cursor='pointer';
+      inp.addEventListener('click',function(){ openDatePicker(this); });
       td.appendChild(inp);
 
     } else if(f.t==='brand'){
@@ -1942,6 +2042,10 @@ function renderConfig(){
   if(document.getElementById('lineSendTime')) document.getElementById('lineSendTime').value = DB.lineSendTime||'09:00';
   // Render employee config
   renderEmpConfig();
+  // Render forecast platforms config
+  renderFcPlatConfig();
+  // Render brand × platform mapping
+  renderBrandPlatMap();
 }
 
 function addBrandRow(){
@@ -1975,6 +2079,114 @@ function saveBrandConfig(){
   BRANDS.length=0; newBrands.forEach(b=>BRANDS.push(b));
   saveDB(); updateBrandDropdowns();
   showToast('✅ บันทึก Config แล้ว!');
+}
+
+// ============================================================
+// FORECAST PLATFORM CONFIG
+// ============================================================
+function renderFcPlatConfig(){
+  loadFcPlat();
+  const tbody = document.getElementById('fcPlatConfigTable');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  FC_PLAT.forEach((p,i)=>{
+    const tr = document.createElement('tr');
+    const isDefault = ['tt','sp','lz'].includes(p.k);
+    tr.innerHTML = `
+      <td style="text-align:center;font-weight:700;">${i+1}</td>
+      <td><input class="cell" value="${p.k}" data-pi="${i}" data-field="k" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:80px" ${isDefault?'readonly':''}></td>
+      <td><input class="cell left" value="${p.label}" data-pi="${i}" data-field="label" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+      <td><input type="color" value="${p.color}" data-pi="${i}" data-field="color" style="width:40px;height:28px;border:1px solid var(--border);border-radius:4px;cursor:pointer;"></td>
+      <td>${isDefault?'<span style="font-size:10px;color:var(--muted);">ค่าเริ่มต้น</span>':'<button class="btn btn-danger btn-sm" onclick="this.closest(\'tr\').remove()">✕</button>'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addFcPlatRow(){
+  const tbody = document.getElementById('fcPlatConfigTable');
+  if(!tbody) return;
+  const i = tbody.children.length;
+  const tr = document.createElement('tr');
+  const colors = ['#4ecdc4','#45b7d1','#96ceb4','#ff9ff3','#feca57','#ff6348','#2ed573'];
+  tr.innerHTML = `
+    <td style="text-align:center;font-weight:700;">${i+1}</td>
+    <td><input class="cell" value="" data-pi="${i}" data-field="k" placeholder="web" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:80px"></td>
+    <td><input class="cell left" value="" data-pi="${i}" data-field="label" placeholder="Website" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+    <td><input type="color" value="${colors[i%colors.length]}" data-pi="${i}" data-field="color" style="width:40px;height:28px;border:1px solid var(--border);border-radius:4px;cursor:pointer;"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function saveFcPlatConfig(){
+  const rows = document.querySelectorAll('#fcPlatConfigTable tr');
+  const platforms = [];
+  rows.forEach(tr=>{
+    const k = tr.querySelector('[data-field="k"]')?.value?.trim().toLowerCase();
+    const label = tr.querySelector('[data-field="label"]')?.value?.trim();
+    const color = tr.querySelector('[data-field="color"]')?.value||'#888888';
+    if(k && label) platforms.push({k, label, color});
+  });
+  if(platforms.length===0){ showToast('⚠️ ต้องมีอย่างน้อย 1 ช่องทาง'); return; }
+  // Check for duplicate keys
+  const keys = platforms.map(p=>p.k);
+  if(new Set(keys).size!==keys.length){ showToast('⚠️ รหัสช่องทางซ้ำกัน!'); return; }
+  DB.forecastPlatforms = platforms;
+  FC_PLAT = platforms;
+  saveDB();
+  showToast('✅ บันทึกช่องทาง Forecast แล้ว!');
+  renderBrandPlatMap();
+  renderForecast();
+}
+
+// --- Brand × Platform mapping ---
+function renderBrandPlatMap(){
+  loadFcPlat();
+  const table = document.getElementById('brandPlatMapTable');
+  if(!table) return;
+  const brands = DB.brands||[];
+  if(brands.length===0||FC_PLAT.length===0){
+    table.innerHTML='<tr><td style="color:var(--muted);padding:12px;">เพิ่มแบรนด์และช่องทางก่อน</td></tr>';
+    return;
+  }
+  if(!DB.brandPlatMap) DB.brandPlatMap={};
+  // Header
+  let hdr = '<thead><tr><th style="min-width:100px;">แบรนด์</th>';
+  FC_PLAT.forEach(p=>{ hdr+=`<th style="text-align:center;min-width:80px;"><span style="color:${p.color};font-weight:600;">${p.label}</span></th>`; });
+  hdr += '<th style="text-align:center;min-width:60px;">ทั้งหมด</th></tr></thead>';
+  // Body
+  let body = '<tbody>';
+  brands.forEach(b=>{
+    const mapped = DB.brandPlatMap[b]||FC_PLAT.map(p=>p.k); // default = all
+    body += `<tr><td style="font-weight:600;">${b}</td>`;
+    FC_PLAT.forEach(p=>{
+      const checked = mapped.includes(p.k)?'checked':'';
+      body += `<td style="text-align:center;"><input type="checkbox" data-brand="${b}" data-plat="${p.k}" ${checked} style="width:16px;height:16px;cursor:pointer;accent-color:${p.color};"></td>`;
+    });
+    const allChecked = FC_PLAT.every(p=>mapped.includes(p.k));
+    body += `<td style="text-align:center;"><input type="checkbox" ${allChecked?'checked':''} onchange="toggleAllPlatForBrand('${b}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>`;
+    body += '</tr>';
+  });
+  body += '</tbody>';
+  table.innerHTML = hdr + body;
+}
+
+function toggleAllPlatForBrand(brand, checked){
+  document.querySelectorAll(`#brandPlatMapTable input[data-brand="${brand}"]`).forEach(cb=>cb.checked=checked);
+}
+
+function saveBrandPlatMap(){
+  const map = {};
+  const brands = DB.brands||[];
+  brands.forEach(b=>{
+    const checks = document.querySelectorAll(`#brandPlatMapTable input[data-brand="${b}"][data-plat]`);
+    const selected = [];
+    checks.forEach(cb=>{ if(cb.checked) selected.push(cb.dataset.plat); });
+    if(selected.length>0) map[b] = selected;
+  });
+  DB.brandPlatMap = map;
+  saveDB();
+  showToast('✅ บันทึกแบรนด์×ช่องทาง แล้ว!');
+  renderForecast();
 }
 
 // ============================================================
@@ -2127,43 +2339,373 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // blur on inputs (covers daily tables, config fields, APM, etc.)
   document.addEventListener('blur', (e)=>{
     const t = e.target;
-    if(t.matches('.page input[type="number"], .page input[type="date"], .page input[type="text"]:not([readonly]), .page textarea')){
+    if(t.matches('.page input[type="number"], .page input[type="date"], .page input[type="time"], .page input[type="text"]:not([readonly]), .page input[data-datepicker], .page textarea')){
       triggerAutoSave();
     }
   }, true);
   // change on selects/checkboxes inside pages
   document.addEventListener('change', (e)=>{
     const t = e.target;
-    if(t.matches('.page select, .page input[type="checkbox"]')){
-      // skip filter selects (month, brand, etc.)
-      if(t.id && (t.id.startsWith('sel') || t.id.startsWith('audit') || t.id.startsWith('apm') || t.id.startsWith('dd') || t.id.startsWith('line') || t.id.startsWith('fc'))) return;
+    if(t.matches('.page select, .page input[type="checkbox"], .page input[type="time"]')){
+      // skip filter selects (month, brand, etc.) but allow lineSendTime
+      if(t.id && t.id!=='lineSendTime' && (t.id.startsWith('sel') || t.id.startsWith('audit') || t.id.startsWith('apm') || t.id.startsWith('dd') || t.id.startsWith('line') || t.id.startsWith('fc'))) return;
       triggerAutoSave();
     }
   });
 });
 
 // === LINE Templates (editable) ===
-const DEFAULT_LINE_SUM_TPL = `📊 ECOM รายวัน — {date}
-════════════════════
-💰 GMV รวม     : ฿{gmv}
-📦 Orders      : {orders} orders
-💹 Net Margin  : {nm_pct}% {nm_status}
-📢 Ads Spend   : ฿{ads}
-🎯 ROAS        : {roas}x {roas_status}
-════════════════════
-🔴 TikTok  : ฿{tt_gmv}
-🟠 Shopee  : ฿{sp_gmv}
-🟣 Lazada  : ฿{lz_gmv}
-════════════════════
-NM Target: {nm_target}% | ROAS Target: {roas_target}x`;
+const MK_TARGET = 40; // MK% ต้องไม่เกิน 40%
+const LINE_BRAND_ORDER = ["JH-ECOM","JARVIT","J-DENT"]; // ลำดับการ broadcast
+const JLC_LOGO_URL = 'https://ecom-dashboard.wejlc.com/img/jlc-logo.png';
 
-const DEFAULT_LINE_BRAND_TPL = `🏷️ Brand Breakdown — {date}
-════════════════════
+// ── Flex Message Storage ──
+var FLEX_SUMMARY_JSON = null;
+var FLEX_BRAND_JSON = null;
+
+// ── Build Flex Message: Summary Report ──
+function buildFlexSummary(rd){
+  const accentGreen = '#00C853';
+  const accentRed = '#FF5252';
+  const warn = '#FFC107';
+  const muted = '#AAAAAA';
+  const white = '#FFFFFF';
+  const bgDark = '#1B1B1B';
+  const bgCard = '#2D2D2D';
+
+  function mkColor(pct){ return pct<=MK_TARGET ? accentGreen : accentRed; }
+  function roasColor(v){ return v>=ROAS_TARGET ? accentGreen : warn; }
+  function fcColor(pct){ return pct>=100?accentGreen:pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
+
+  // Progress bar boxes
+  const barFilled = Math.min(10, Math.round(Math.min(100,rd.fcPct)/10));
+  const barBoxes = [];
+  for(let i=0;i<10;i++){
+    barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?accentGreen:'#444444',cornerRadius:'2px'});
+  }
+
+  // Platform rows
+  const platColors = {tt:accentRed,sp:'#FF9800',lz:'#B388FF'};
+  const platRows = FC_PLAT.map(pl=>{
+    const tg = rd.todayData.byPlat[pl.k]?.gmv||0;
+    const mg = rd.monthData.byPlat[pl.k]?.gmv||0;
+    return {type:'box',layout:'horizontal',contents:[
+      {type:'text',text:pl.label,size:'sm',color:platColors[pl.k]||muted,flex:2},
+      {type:'text',text:'฿'+fmt(tg),size:'sm',color:white,align:'end',flex:3},
+      {type:'text',text:'฿'+fmt(mg),size:'sm',color:muted,align:'end',flex:3}
+    ],margin:'sm'};
+  });
+
+  const bubble = {
+    type:'bubble',size:'mega',
+    styles:{header:{backgroundColor:'#1A237E'},body:{backgroundColor:bgDark},footer:{backgroundColor:bgDark}},
+    header:{type:'box',layout:'vertical',contents:[
+      {type:'text',text:'📊 JLC ALL ONLINE Daily Report',size:'lg',weight:'bold',color:white},
+      {type:'text',text:rd.dateLabel,size:'sm',color:'#B0BEC5',margin:'xs'}
+    ],paddingAll:'16px'},
+    body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'16px',contents:[
+      // ── ยอดวันนี้ ──
+      {type:'text',text:'📅 ยอดวันนี้',weight:'bold',color:accentGreen,size:'sm'},
+      {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'GMV',size:'sm',color:muted,flex:2},
+          {type:'text',text:'฿'+fmt(rd.todayData.gmv),size:'sm',color:white,weight:'bold',align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'Ads',size:'sm',color:muted,flex:2},
+          {type:'text',text:'฿'+fmt(rd.todayData.ads),size:'sm',color:white,align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'MK%',size:'sm',color:muted,flex:2},
+          {type:'text',text:rd.todayMkPct.toFixed(1)+'%',size:'sm',color:mkColor(rd.todayMkPct),weight:'bold',align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'ROAS',size:'sm',color:muted,flex:2},
+          {type:'text',text:rd.todayRoas.toFixed(1)+'x',size:'sm',color:roasColor(rd.todayRoas),weight:'bold',align:'end',flex:4}
+        ]},
+      ]},
+      {type:'separator',color:'#444444'},
+      // ── สะสมเดือน ──
+      {type:'text',text:'📆 สะสมเดือน '+rd.monthName+' ('+rd.daysPassed+' วัน)',weight:'bold',color:'#42A5F5',size:'sm'},
+      {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'GMV สะสม',size:'sm',color:muted,flex:3},
+          {type:'text',text:'฿'+fmt(rd.monthData.gmv),size:'sm',color:white,weight:'bold',align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'เฉลี่ย/วัน',size:'sm',color:muted,flex:3},
+          {type:'text',text:'฿'+fmt(Math.round(rd.monthAvg)),size:'sm',color:'#42A5F5',weight:'bold',align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'Ads สะสม',size:'sm',color:muted,flex:3},
+          {type:'text',text:'฿'+fmt(rd.monthData.ads),size:'sm',color:white,align:'end',flex:4}
+        ]},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'MK%',size:'sm',color:muted,flex:3},
+          {type:'text',text:rd.monthMkPct.toFixed(1)+'%',size:'sm',color:mkColor(rd.monthMkPct),weight:'bold',align:'end',flex:4}
+        ]},
+      ]},
+      {type:'separator',color:'#444444'},
+      // ── FC Target ──
+      {type:'text',text:'🎯 เป้า FC: ฿'+fmt(rd.fcTarget),weight:'bold',color:warn,size:'sm'},
+      {type:'box',layout:'horizontal',spacing:'xs',margin:'sm',contents:barBoxes},
+      {type:'box',layout:'horizontal',margin:'xs',contents:[
+        {type:'text',text:'ทำได้ '+rd.fcPct.toFixed(1)+'%',size:'xs',color:fcColor(rd.fcPct)},
+        {type:'text',text:'ขาด ฿'+fmt(Math.round(rd.fcGap)),size:'xs',color:accentRed,align:'end'}
+      ]},
+      {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmt(Math.round(rd.fcDailyNeed))+' (เหลือ '+rd.daysRemain+' วัน)',size:'xs',color:muted,margin:'xs'},
+      {type:'separator',color:'#444444'},
+      // ── Per Platform ──
+      {type:'box',layout:'horizontal',contents:[
+        {type:'text',text:'ช่องทาง',size:'xs',color:muted,flex:2},
+        {type:'text',text:'วันนี้',size:'xs',color:muted,align:'end',flex:3},
+        {type:'text',text:'เดือน',size:'xs',color:muted,align:'end',flex:3}
+      ]},
+    ].concat(platRows).concat([
+      {type:'separator',color:'#444444'},
+      {type:'text',text:rd.motivation,size:'sm',color:accentGreen,wrap:true,align:'center',margin:'sm'}
+    ])}
+  };
+
+  // Add MK warnings if any
+  if(rd.mkWarnings && rd.mkWarnings.includes('🚨')){
+    const warningLines = rd.mkWarnings.split('\n');
+    const warningContents = warningLines.map(function(line){
+      return {type:'text',text:line,size:'xs',color:accentRed,wrap:true};
+    });
+    bubble.body.contents.splice(-2, 0, ...warningContents);
+    bubble.body.contents.splice(-2, 0, {type:'separator',color:'#444444'});
+  }
+
+  return bubble;
+}
+
+// ── Build Flex Message: Per-Brand Report ──
+// ── Build Flex Carousel: 1 bubble per brand ──
+function buildFlexBrandCarousel(rd){
+  const accentGreen = '#00C853';
+  const accentRed = '#FF5252';
+  const warn = '#FFC107';
+  const muted = '#AAAAAA';
+  const white = '#FFFFFF';
+
+  // Brand-specific header colors
+  const brandHeaderColors = {"jh-ecom":'#1B5E20','jarvit':'#E91E63','j-dent':'#388E3C'};
+  const defaultHeaderColors = ['#4A148C','#1A237E','#004D40','#BF360C','#1B5E20','#F57F17'];
+
+  function mkColor(pct){ return pct<=MK_TARGET ? accentGreen : accentRed; }
+  function fcColor(pct){ return pct>=100?accentGreen:pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
+  function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:muted,flex:3},{type:'text',text:val,size:'sm',color:color||white,weight:'bold',align:'end',flex:4}]}; }
+
+  const bubbles = [];
+  let colorIdx = 0;
+
+  // Sort brands by preferred order
+  const sortedBrands = LINE_BRAND_ORDER.filter(b => BRANDS.map(x=>x.toLowerCase()).includes(b.toLowerCase()));
+  BRANDS.forEach(b => { if(!sortedBrands.find(s=>s.toLowerCase()===b.toLowerCase())) sortedBrands.push(b); });
+
+  sortedBrands.forEach(function(b){
+    const bMonth = rd.monthData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0,byPlat:{}};
+    const bToday = rd.todayData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0,byPlat:{}};
+    const bGmv = bMonth?.gmv||0;
+    const bTodayGmv = bToday?.gmv||0;
+    const bAds = bMonth?.ads||0;
+    const bTotalCost = bMonth?.totalCost||0;
+    const bOrders = bMonth?.orders||0;
+    const bTodayOrders = bToday?.orders||0;
+    const bRoas = bAds>0?bGmv/bAds:0;
+    const bFcTarget = rd.brandFc[b]||0;
+    const bFcPct = bFcTarget>0?(bGmv/bFcTarget*100):0;
+    const bFcGap = Math.max(0, bFcTarget-bGmv);
+    const bMkPct = bGmv>0?(bTotalCost/bGmv*100):0;
+    const icon = bFcPct>=100?'🏆':bFcPct>=70?'🟢':bFcPct>=40?'🟡':'🔴';
+    const daysRemain = rd.daysRemain;
+    const bDailyNeed = daysRemain>0 ? bFcGap/daysRemain : 0;
+
+    // Progress bar
+    const barFilled = Math.min(10, Math.round(Math.min(100,bFcPct)/10));
+    const barBoxes = [];
+    for(let i=0;i<10;i++){
+      barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?fcColor(bFcPct):'#444444',cornerRadius:'2px'});
+    }
+
+    // Per-platform breakdown for this brand
+    const bPlatRows = FC_PLAT.map(pl=>{
+      const platColors = {tt:accentRed,sp:'#FF9800',lz:'#B388FF'};
+      const tGmv = bToday?.byPlat?.[pl.k]?.gmv || 0;
+      const mGmv = bMonth?.byPlat?.[pl.k]?.gmv || 0;
+      return {type:'box',layout:'horizontal',contents:[
+        {type:'text',text:pl.label,size:'xs',color:platColors[pl.k]||muted,flex:2},
+        {type:'text',text:'฿'+fmt(tGmv),size:'xs',color:white,align:'end',flex:3},
+        {type:'text',text:'฿'+fmt(mGmv),size:'xs',color:muted,align:'end',flex:3}
+      ],margin:'xs'};
+    });
+
+    const hdrColor = brandHeaderColors[b.toLowerCase()] || defaultHeaderColors[colorIdx % defaultHeaderColors.length];
+    colorIdx++;
+
+    bubbles.push({
+      type:'bubble',size:'kilo',
+      styles:{header:{backgroundColor:hdrColor},body:{backgroundColor:'#1B1B1B'}},
+      header:{type:'box',layout:'vertical',contents:[
+        {type:'text',text:icon+' '+b,size:'lg',weight:'bold',color:white},
+        {type:'text',text:rd.dateLabel,size:'xs',color:'#B0BEC5',margin:'xs'}
+      ],paddingAll:'14px'},
+      body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',contents:[
+        // ── ยอดวันนี้ ──
+        {type:'text',text:'📅 วันนี้',weight:'bold',color:accentGreen,size:'xs'},
+        hRow('GMV','฿'+fmt(bTodayGmv)),
+        {type:'separator',color:'#444444'},
+        // ── สะสมเดือน ──
+        {type:'text',text:'📆 เดือน '+rd.monthName,weight:'bold',color:'#42A5F5',size:'xs'},
+        hRow('GMV สะสม','฿'+fmt(bGmv)),
+        hRow('Ads','฿'+fmt(bAds)),
+        hRow('MK%',bMkPct.toFixed(1)+'%',mkColor(bMkPct)),
+        hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=ROAS_TARGET?accentGreen:warn),
+        {type:'separator',color:'#444444'},
+        // ── FC ──
+        {type:'text',text:'🎯 FC: ฿'+fmt(bFcTarget),weight:'bold',color:warn,size:'xs'},
+        {type:'box',layout:'horizontal',spacing:'xs',contents:barBoxes,margin:'xs'},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:bFcPct.toFixed(1)+'%',size:'xs',color:fcColor(bFcPct),weight:'bold'},
+          {type:'text',text:'ขาด ฿'+fmt(bFcGap),size:'xs',color:accentRed,align:'end'}
+        ]},
+        {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmt(Math.round(bDailyNeed)),size:'xs',color:muted},
+        {type:'separator',color:'#444444'},
+        // ── Per platform ──
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'',size:'xs',color:muted,flex:2},
+          {type:'text',text:'วันนี้',size:'xs',color:muted,align:'end',flex:3},
+          {type:'text',text:'เดือน',size:'xs',color:muted,align:'end',flex:3}
+        ]}
+      ].concat(bPlatRows)}
+    });
+  });
+
+  // Return carousel container
+  return {
+    type:'carousel',
+    contents: bubbles
+  };
+}
+
+// ── Render Flex Preview as HTML (mimics LINE look) ──
+// ── Render single bubble to HTML ──
+function renderBubbleHTML(bubble){
+  function renderBox(box){
+    if(!box) return '';
+    const layout = box.layout||'vertical';
+    const dir = layout==='horizontal'?'row':'column';
+    const spacing = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px',xl:'16px',xxl:'20px'}[box.spacing||'none']||'0';
+    const margin = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px',xl:'16px'}[box.margin||'none']||'0';
+    const bg = box.backgroundColor||'transparent';
+    const w = box.width||'auto';
+    const h = box.height||'auto';
+    const cr = box.cornerRadius||'0';
+    const pad = box.paddingAll||'0';
+    let inner = (box.contents||[]).map(c=>renderComponent(c)).join('');
+    return `<div style="display:flex;flex-direction:${dir};gap:${spacing};margin-top:${margin};background:${bg};width:${w};height:${h};border-radius:${cr};padding:${pad};align-items:${layout==='horizontal'?'center':'stretch'};min-width:0">${inner}</div>`;
+  }
+  function renderComponent(c){
+    if(!c) return '';
+    if(c.type==='box') return renderBox(c);
+    if(c.type==='text'){
+      const sz = {xxs:'10px',xs:'11px',sm:'12px',md:'13px',lg:'15px',xl:'17px',xxl:'20px'}[c.size||'md']||'13px';
+      const wt = c.weight==='bold'?'700':'400';
+      const al = c.align||'start';
+      const fl = c.flex!==undefined?('flex:'+c.flex):'';
+      const wrap = c.wrap?'white-space:normal':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      const margin = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px'}[c.margin||'none']||'0';
+      return `<div style="font-size:${sz};font-weight:${wt};color:${c.color||'#fff'};text-align:${al};${fl};${wrap};margin-top:${margin};line-height:1.5;min-width:0">${escHtml(c.text||'')}</div>`;
+    }
+    if(c.type==='separator'){
+      const margin = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px'}[c.margin||'none']||'0';
+      return `<div style="height:1px;background:${c.color||'#444'};margin:${margin} 0"></div>`;
+    }
+    if(c.type==='filler') return `<div style="flex:1"></div>`;
+    if(c.type==='spacer') return `<div style="height:8px"></div>`;
+    return '';
+  }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  const headerBg = bubble.styles?.header?.backgroundColor||'#1A237E';
+  const bodyBg = bubble.styles?.body?.backgroundColor||'#1B1B1B';
+
+  let html = `<div style="border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">`;
+  if(bubble.header) html += `<div style="background:${headerBg};padding:0">${renderBox(bubble.header)}</div>`;
+  if(bubble.body) html += `<div style="background:${bodyBg};padding:0">${renderBox(bubble.body)}</div>`;
+  if(bubble.footer) html += `<div style="background:${bodyBg};padding:0">${renderBox(bubble.footer)}</div>`;
+  html += `</div>`;
+  return html;
+}
+
+// ── Render single bubble into container ──
+function renderFlexPreview(bubble, containerId){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  el.innerHTML = renderBubbleHTML(bubble);
+}
+
+// ── Render brand bubbles vertically ──
+function renderCarouselPreview(carousel, containerId){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!carousel || !carousel.contents || !carousel.contents.length){
+    el.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">ยังไม่มีข้อมูลแบรนด์</div>';
+    return;
+  }
+  el.innerHTML = carousel.contents.map(function(bubble){
+    return '<div style="width:100%;">' + renderBubbleHTML(bubble) + '</div>';
+  }).join('');
+}
+
+function copyFlexJSON(type){
+  const json = type==='summary' ? FLEX_SUMMARY_JSON : FLEX_BRAND_JSON;
+  if(!json) return showToast('❌ ไม่มีข้อมูล');
+  const msg = {type:'flex',altText:type==='summary'?'JLC ALL ONLINE Daily Report':'Brand Report',contents:json};
+  navigator.clipboard.writeText(JSON.stringify(msg,null,2)).then(()=>showToast('📋 คัดลอก Flex JSON แล้ว!')).catch(()=>{});
+}
+
+const DEFAULT_LINE_SUM_TPL = `📊 JLC ALL ONLINE Daily Report — {date}
+══════════════════════
+
+📅 ยอดวันนี้
+💰 GMV       : ฿{today_gmv}
+📦 Orders    : {today_orders}
+📢 Ads       : ฿{today_ads}
+💸 MK%       : {today_mk_pct}% {today_mk_status}
+🎯 ROAS      : {today_roas}x {today_roas_status}
+
+📆 สะสมเดือน {month_name} ({days_passed} วัน)
+💰 GMV สะสม    : ฿{month_gmv}
+📊 เฉลี่ย/วัน  : ฿{month_avg}
+📦 Orders     : {month_orders}
+📢 Ads สะสม   : ฿{month_ads}
+💸 MK% เดือน  : {month_mk_pct}% {month_mk_status}
+══════════════════════
+
+🎯 เป้า FC: ฿{fc_target}
+📈 ทำได้: {fc_pct}% {fc_bar}
+🔥 ขาดอีก: ฿{fc_gap}
+⏳ ต้องทำ/วัน: ฿{fc_daily_need} (เหลือ {days_remain} วัน)
+══════════════════════
+{plat_daily_rows}
+══════════════════════
+{mk_warnings}
+{motivation}`;
+
+const DEFAULT_LINE_BRAND_TPL = `🏷️ Brand Report — {date}
+══════════════════════
 {brand_rows}
-════════════════════
-{warnings}`;
+══════════════════════
+{mk_warnings}
+{motivation}`;
 
-const DEFAULT_LINE_BRAND_ROW_TPL = `{b_icon} {b_name}: ฿{b_gmv} | NM {b_nm_pct}%`;
+const DEFAULT_LINE_BRAND_ROW_TPL = `{b_icon} {b_name}
+   💰 วันนี้: ฿{b_today_gmv} | เดือน: ฿{b_gmv}
+   🎯 FC: {b_fc_pct}% (ขาด ฿{b_fc_gap})
+   📢 Ads: ฿{b_ads} | MK: {b_mk_pct}% {b_mk_status}
+   🎯 ROAS: {b_roas}x`;
 
 let LINE_SUM_TPL = DEFAULT_LINE_SUM_TPL;
 let LINE_BRAND_TPL = DEFAULT_LINE_BRAND_TPL;
@@ -2229,6 +2771,17 @@ async function loadLineTemplates(){
       }
     }
   } catch(e){ console.warn('loadLineTemplates:', e); }
+  // Load custom messages
+  try {
+    if(IS_API){
+      const resp2 = await fetch(API_BASE+'/api/config/line_custom_msgs');
+      const data2 = await resp2.json();
+      if(data2.value) { DB.lineCustomMsgs = JSON.parse(data2.value); LINE_CUSTOM_MSGS = DB.lineCustomMsgs; }
+    } else {
+      const saved2 = localStorage.getItem('line_custom_msgs');
+      if(saved2) { DB.lineCustomMsgs = JSON.parse(saved2); LINE_CUSTOM_MSGS = DB.lineCustomMsgs; }
+    }
+  } catch(e){ console.warn('loadLineCustomMsgs:', e); }
 }
 
 function resetLineTemplates(){
@@ -2242,6 +2795,292 @@ function resetLineTemplates(){
   showToast('🔄 คืนค่า Template เดิมแล้ว');
 }
 
+// ============================================================
+// CUSTOM LINE MESSAGES (template + free text)
+// ============================================================
+var LINE_CUSTOM_MSGS = []; // [{id, type:'template'|'free', name, content}]
+var _lineMsgCounter = 0;
+
+function loadLineCustomMsgs(){
+  if(Array.isArray(DB.lineCustomMsgs)) LINE_CUSTOM_MSGS = DB.lineCustomMsgs;
+}
+
+function addLineMsg(type){
+  _lineMsgCounter++;
+  const id = 'lm_' + Date.now() + '_' + _lineMsgCounter;
+  if(type==='template'){
+    LINE_CUSTOM_MSGS.push({id, type:'template', name:'รายงาน #'+LINE_CUSTOM_MSGS.length, sendTime:'09:00', content:'📋 รายงาน — {date}\n════════════════════\n💰 GMV: ฿{gmv}\n📦 Orders: {orders}\n════════════════════'});
+  } else {
+    LINE_CUSTOM_MSGS.push({id, type:'free', name:'ข้อความ #'+LINE_CUSTOM_MSGS.length, sendTime:'09:00', content:''});
+  }
+  renderLineMsgList();
+}
+
+function removeLineMsg(id){
+  LINE_CUSTOM_MSGS = LINE_CUSTOM_MSGS.filter(m=>m.id!==id);
+  renderLineMsgList();
+  saveLineCustomMsgs();
+}
+
+function renderLineMsgList(){
+  const container = document.getElementById('lineMsgList');
+  if(!container) return;
+  if(LINE_CUSTOM_MSGS.length===0){
+    container.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px;">ยังไม่มีข้อความเพิ่มเติม กด "+ Template" หรือ "+ ข้อความอิสระ" เพื่อเพิ่ม</div>';
+    return;
+  }
+  container.innerHTML = LINE_CUSTOM_MSGS.map((msg,i)=>{
+    const isTemplate = msg.type==='template';
+    const icon = isTemplate ? '📋' : '✉️';
+    const borderColor = isTemplate ? 'var(--accent)' : '#e67e22';
+    return `<div class="card" style="margin-bottom:14px;border-left:3px solid ${borderColor};">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:14px;">${icon}</span>
+          <input class="cell left" value="${(msg.name||'').replace(/"/g,'&quot;')}" onchange="updateLineMsg('${msg.id}','name',this.value)"
+            style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);font-weight:600;width:200px;font-size:13px;" placeholder="ชื่อข้อความ">
+          <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${isTemplate?'rgba(108,99,255,.15)':'rgba(230,126,34,.15)'};color:${isTemplate?'var(--accent)':'#e67e22'};">${isTemplate?'Template':'อิสระ'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--muted);">⏰</span>
+          <input type="time" value="${msg.sendTime||'09:00'}" onchange="updateLineMsg('${msg.id}','sendTime',this.value)"
+            style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);padding:4px 8px;">
+          <button class="btn btn-danger btn-sm" onclick="removeLineMsg('${msg.id}')">✕</button>
+        </div>
+      </div>
+      ${isTemplate ? `<div style="color:var(--muted);font-size:10px;margin-bottom:6px;">ใช้ตัวแปร: {date} {gmv} {orders} {nm_pct} {ads} {roas} {tt_gmv} {sp_gmv} {lz_gmv}</div>` : ''}
+      <textarea rows="${isTemplate?6:4}" onchange="updateLineMsg('${msg.id}','content',this.value)"
+        style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'Courier New',monospace;font-size:11px;resize:vertical;"
+        placeholder="${isTemplate?'พิมพ์ template ใช้ {date} {gmv} ฯลฯ':'พิมพ์ข้อความอะไรก็ได้...'}">${(msg.content||'').replace(/</g,'&lt;')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="previewLineMsg('${msg.id}')">👁️ Preview</button>
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyLineMsgText('${msg.id}')">📋 Copy</button>
+        <button class="btn btn-success btn-sm" onclick="saveLineCustomMsgs()">💾 บันทึก</button>
+        <pre id="preview_${msg.id}" style="display:none;flex:1;background:#0d1f0d;border:1px solid #1d4a1d;border-radius:8px;padding:10px;font-size:11px;line-height:1.6;color:#90ee90;white-space:pre-wrap;font-family:'Courier New',monospace;margin:0;"></pre>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateLineMsg(id, field, value){
+  const msg = LINE_CUSTOM_MSGS.find(m=>m.id===id);
+  if(msg) msg[field] = value;
+}
+
+function previewLineMsg(id){
+  const msg = LINE_CUSTOM_MSGS.find(m=>m.id===id);
+  if(!msg) return;
+  const pre = document.getElementById('preview_'+id);
+  if(!pre) return;
+
+  if(pre.style.display!=='none' && pre.textContent){
+    pre.style.display='none'; return;
+  }
+
+  let text = msg.content||'';
+  if(msg.type==='template'){
+    text = applyLineMsgVars(text);
+  }
+  pre.textContent = text;
+  pre.style.display='block';
+}
+
+function applyLineMsgVars(text){
+  return applyLineVarsToText(text);
+}
+
+function copyLineMsgText(id){
+  const msg = LINE_CUSTOM_MSGS.find(m=>m.id===id);
+  if(!msg) return;
+  let text = msg.content||'';
+  if(msg.type==='template') text = applyLineMsgVars(text);
+  navigator.clipboard.writeText(text).then(()=>showToast('📋 คัดลอกแล้ว!')).catch(()=>{});
+}
+
+async function saveLineCustomMsgs(){
+  DB.lineCustomMsgs = LINE_CUSTOM_MSGS;
+  if(IS_API){
+    try {
+      await apiFetch(API_BASE+'/api/config/line_custom_msgs',{
+        method:'PUT',
+        body:JSON.stringify({value:JSON.stringify(LINE_CUSTOM_MSGS)})
+      });
+      showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
+    } catch(e){ showToast('❌ บันทึกไม่ได้: '+e.message); }
+  } else {
+    localStorage.setItem('line_custom_msgs', JSON.stringify(LINE_CUSTOM_MSGS));
+    showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
+  }
+}
+
+// ── LINE Report Data Calculator ──
+function getLineReportData(){
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const monthPrefix = `${yyyy}-${mm}`;
+  const mi = today.getMonth(); // 0-indexed month for forecast
+
+  const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const dateLabel = `${today.getDate()} ${thMonths[mi+1]} ${yyyy+543}`;
+  const monthName = thMonths[mi+1];
+
+  // Days in month & remaining
+  const daysInMonth = new Date(yyyy, mi+1, 0).getDate();
+  const daysRemain = daysInMonth - today.getDate();
+
+  // ── Gather ALL raw rows (ignore month/brand filter) ──
+  function getAllRows(){
+    const rows = [];
+    ['tt','sp','lz'].forEach(plat=>{
+      (DB[plat]||[]).forEach(r=>{
+        if(!r.date) return;
+        rows.push({...r, platform:plat});
+      });
+    });
+    return rows;
+  }
+  const allRaw = getAllRows();
+
+  // ── Today's rows ──
+  const todayRows = allRaw.filter(r=>String(r.date||'')===todayStr);
+  // ── This month's rows ──
+  const monthRows = allRaw.filter(r=>String(r.date||'').startsWith(monthPrefix));
+
+  // Ads only (for ROAS calculation)
+  function calcAds(r){
+    const n=k=>parseFloat(r[k]||0);
+    if(r.platform==='tt') return n('costGMVAds')+n('costGMVLive');
+    if(r.platform==='sp') return n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    if(r.platform==='lz') return n('lzsd')+n('lzGmvMax')+n('affLz');
+    return 0;
+  }
+  // MK cost = promo + free + kol + commission + ads (ไม่รวม cogs, platFee)
+  function calcTotalCost(r){
+    const n=k=>parseFloat(r[k]||0);
+    if(r.platform==='tt') return n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGMVAds')+n('costGMVLive');
+    if(r.platform==='sp') return n('promo')+n('free')+n('commCreator')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    if(r.platform==='lz') return n('promo')+n('free')+n('commCreator')+n('lzsd')+n('lzGmvMax')+n('affLz');
+    return 0;
+  }
+
+  function sumRows(rows){
+    let gmv=0,orders=0,ads=0,totalCost=0,nm=0;
+    const byPlat={tt:{gmv:0,ads:0},sp:{gmv:0,ads:0},lz:{gmv:0,ads:0}};
+    const byBrand={};
+    rows.forEach(r=>{
+      const g=parseFloat(r.gmv||0), o=parseFloat(r.orders||0), a=calcAds(r), tc=calcTotalCost(r), n=parseFloat(r.nm||0);
+      gmv+=g; orders+=o; ads+=a; totalCost+=tc; nm+=n;
+      const pl=r.platform;
+      if(byPlat[pl]){ byPlat[pl].gmv+=g; byPlat[pl].ads+=a; }
+      const b=r.brand;
+      if(b){
+        if(!byBrand[b]) byBrand[b]={gmv:0,orders:0,ads:0,totalCost:0,nm:0,byPlat:{tt:{gmv:0},sp:{gmv:0},lz:{gmv:0}}};
+        byBrand[b].gmv+=g; byBrand[b].orders+=o; byBrand[b].ads+=a; byBrand[b].totalCost+=tc; byBrand[b].nm+=n;
+        if(byBrand[b].byPlat[pl]) byBrand[b].byPlat[pl].gmv+=g;
+      }
+    });
+    return {gmv,orders,ads,totalCost,nm,byPlat,byBrand};
+  }
+
+  const todayData = sumRows(todayRows);
+  const monthData = sumRows(monthRows);
+
+  // Unique dates this month (days with data)
+  const uniqueDates = new Set(monthRows.map(r=>r.date));
+  const daysPassed = uniqueDates.size || 1;
+  const monthAvg = monthData.gmv / daysPassed;
+
+  // ── Forecast target ──
+  let fcTarget = 0;
+  if(DB.forecastGMV){
+    BRANDS.forEach(b=>{
+      const bData = DB.forecastGMV[b];
+      if(!bData) return;
+      getBrandPlats(b).forEach(pl=>{
+        if(bData[pl.k] && bData[pl.k][mi]) fcTarget += parseFloat(bData[pl.k][mi])||0;
+      });
+    });
+  }
+  const fcPct = fcTarget>0 ? (monthData.gmv/fcTarget*100) : 0;
+  const fcGap = Math.max(0, fcTarget - monthData.gmv);
+  const fcDailyNeed = daysRemain>0 ? fcGap/daysRemain : 0;
+
+  // Per-brand FC
+  const brandFc = {};
+  BRANDS.forEach(b=>{
+    let bTarget = 0;
+    if(DB.forecastGMV && DB.forecastGMV[b]){
+      getBrandPlats(b).forEach(pl=>{
+        if(DB.forecastGMV[b][pl.k] && DB.forecastGMV[b][pl.k][mi]) bTarget += parseFloat(DB.forecastGMV[b][pl.k][mi])||0;
+      });
+    }
+    brandFc[b] = bTarget;
+  });
+
+  // ROAS
+  const todayRoas = todayData.ads>0 ? todayData.gmv/todayData.ads : 0;
+  const monthRoas = monthData.ads>0 ? monthData.gmv/monthData.ads : 0;
+
+  // MK% (Marketing Cost / GMV * 100) — target ≤ 40%
+  // MK% = totalCost (ค่าใช้จ่ายทั้งหมด) / GMV — ไม่ใช่แค่ ads
+  const todayMkPct = todayData.gmv>0 ? (todayData.totalCost/todayData.gmv*100) : 0;
+  const monthMkPct = monthData.gmv>0 ? (monthData.totalCost/monthData.gmv*100) : 0;
+
+  // Per-brand MK%
+  const brandMk = {};
+  BRANDS.forEach(b=>{
+    const bMonth = monthData.byBrand[b];
+    if(bMonth && bMonth.gmv>0){
+      brandMk[b] = bMonth.totalCost/bMonth.gmv*100;
+    } else {
+      brandMk[b] = 0;
+    }
+  });
+
+  // MK warnings — brands ที่ MK% เกิน target
+  const mkOverBrands = BRANDS.filter(b=> brandMk[b]>MK_TARGET && (monthData.byBrand[b]?.gmv||0)>0);
+  let mkWarnings = '';
+  if(mkOverBrands.length>0){
+    mkWarnings = '🚨 MK% เกินเป้า (>' + MK_TARGET + '%):\n' + mkOverBrands.map(b=>`⚠️ ${b} → MK ${brandMk[b].toFixed(1)}%`).join('\n');
+  } else if(monthData.gmv>0){
+    mkWarnings = '✅ ทุกแบรนด์ MK% อยู่ในเป้า!';
+  }
+
+  // Progress bar (10 segments)
+  const pctClamped = Math.min(100, fcPct);
+  const filled = Math.round(pctClamped/10);
+  const fcBar = '█'.repeat(filled) + '░'.repeat(10-filled);
+
+  // Motivation message
+  let motivation = '';
+  if(fcPct >= 100) motivation = '🏆 ยอดเยี่ยม! ทะลุเป้าแล้ว! ไปต่อกันเลย! 💪🔥';
+  else if(fcPct >= 80) motivation = '🔥 ใกล้มาก! เหลือแค่นิดเดียว สู้ๆ! 💪';
+  else if(fcPct >= 60) motivation = '💪 กำลังไปได้ดี ยังพอไหว ลุยต่อ!';
+  else if(fcPct >= 40) motivation = '⚡ ต้องเร่งมือหน่อยนะ ยังมีเวลา!';
+  else motivation = '🚀 ต้องเพิ่มเต็มกำลัง เร่งเครื่องเลย!';
+
+  // Per-platform daily rows (dynamic from FC_PLAT)
+  const platColors = {tt:'🔴',sp:'🟠',lz:'🟣'};
+  const platDailyRows = FC_PLAT.map(pl=>{
+    const tg = todayData.byPlat[pl.k]?.gmv || 0;
+    const mg = monthData.byPlat[pl.k]?.gmv || 0;
+    const icon = platColors[pl.k] || '⚪';
+    return `${icon} ${pl.label}: ฿${fmt(tg)} (วันนี้) | ฿${fmt(mg)} (เดือน)`;
+  }).join('\n');
+
+  return {
+    dateLabel, monthName, daysPassed, daysRemain, daysInMonth,
+    todayData, monthData, monthAvg,
+    fcTarget, fcPct, fcGap, fcDailyNeed, fcBar,
+    todayRoas, monthRoas,
+    todayMkPct, monthMkPct, brandMk, mkWarnings,
+    brandFc, platDailyRows, motivation
+  };
+}
+
 function renderLINE(){
   // populate brand dropdown
   const sel=document.getElementById('lineBrandSel');
@@ -2249,80 +3088,96 @@ function renderLINE(){
     BRANDS.forEach(b=>{ const o=document.createElement('option'); o.value=b; o.text=b; sel.appendChild(o); });
   }
 
-  const allRows=aggregateData();
-  const byBrand=aggregateByBrand(allRows);
-  const brandKeys=Object.keys(byBrand);
-  const totalGMV=allRows.reduce((s,r)=>s+p(r.gmv),0);
-  const totalNM=allRows.reduce((s,r)=>s+p(r.nm),0);
-  const totalAds=brandKeys.reduce((s,b)=>s+byBrand[b].ads,0);
-  const totalOrders=allRows.reduce((s,r)=>s+p(r.orders),0);
-  const nmPct=totalGMV>0?totalNM/totalGMV*100:0;
-  const roas=totalAds>0?totalGMV/totalAds:0;
+  const rd = getLineReportData();
 
-  const today=new Date();
-  const d=today.getDate(), m=today.getMonth();
-  const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  const dateLabel=`${d} ${thMonths[m+1]} ${today.getFullYear()+543}`;
-  const byPlat=aggregateByPlat(allRows);
+  // Build Flex Messages
+  FLEX_SUMMARY_JSON = buildFlexSummary(rd);
+  FLEX_BRAND_JSON = buildFlexBrandCarousel(rd);
 
-  // Read from textarea if editor is open, otherwise use saved template
-  const editorOpen = document.getElementById('lineEditorPanel')?.style.display !== 'none';
-  const sumTpl = editorOpen ? (document.getElementById('lineSumTpl')?.value || LINE_SUM_TPL) : LINE_SUM_TPL;
-  const brandTpl = editorOpen ? (document.getElementById('lineBrandTpl')?.value || LINE_BRAND_TPL) : LINE_BRAND_TPL;
-  const brandRowTpl = editorOpen ? (document.getElementById('lineBrandRowTpl')?.value || LINE_BRAND_ROW_TPL) : LINE_BRAND_ROW_TPL;
+  // Render Flex previews
+  renderFlexPreview(FLEX_SUMMARY_JSON, 'lineSum');
+  renderCarouselPreview(FLEX_BRAND_JSON, 'lineBrandMsg');
 
-  // Replace summary variables
-  let sumText = sumTpl
-    .replace(/{date}/g, dateLabel)
-    .replace(/{gmv}/g, fmt(totalGMV))
-    .replace(/{orders}/g, fmt(totalOrders))
-    .replace(/{nm_pct}/g, nmPct.toFixed(1))
-    .replace(/{nm_status}/g, nmPct>=NM_TARGET?'✅':'⚠️')
-    .replace(/{ads}/g, fmt(totalAds))
-    .replace(/{roas}/g, roas.toFixed(1))
-    .replace(/{roas_status}/g, roas>=ROAS_TARGET?'✅':'⚠️')
-    .replace(/{tt_gmv}/g, fmt(byPlat.tt.gmv))
-    .replace(/{sp_gmv}/g, fmt(byPlat.sp.gmv))
-    .replace(/{lz_gmv}/g, fmt(byPlat.lz.gmv))
+  // Set send times for built-in reports
+  const sumTimeEl = document.getElementById('lineSumTime');
+  const brandTimeEl = document.getElementById('lineBrandTime');
+  if(sumTimeEl) sumTimeEl.value = DB.lineSumSendTime || DB.lineSendTime || '09:00';
+  if(brandTimeEl) brandTimeEl.value = DB.lineBrandSendTime || DB.lineSendTime || '09:00';
+
+  // Render custom messages list
+  loadLineCustomMsgs();
+  renderLineMsgList();
+}
+
+// ── Apply all LINE variables to any text ──
+function applyLineVarsToText(text, rd){
+  if(!rd) rd = getLineReportData();
+  return text
+    .replace(/{date}/g, rd.dateLabel)
+    .replace(/{month_name}/g, rd.monthName)
+    .replace(/{days_passed}/g, rd.daysPassed)
+    .replace(/{days_remain}/g, rd.daysRemain)
+    // Today
+    .replace(/{today_gmv}/g, fmt(rd.todayData.gmv))
+    .replace(/{today_orders}/g, fmt(rd.todayData.orders))
+    .replace(/{today_ads}/g, fmt(rd.todayData.ads))
+    .replace(/{today_roas}/g, rd.todayRoas.toFixed(1))
+    .replace(/{today_roas_status}/g, rd.todayRoas>=ROAS_TARGET?'✅':'⚠️')
+    .replace(/{today_mk_pct}/g, rd.todayMkPct.toFixed(1))
+    .replace(/{today_mk_status}/g, rd.todayMkPct<=MK_TARGET?'✅':'🔴')
+    // Month
+    .replace(/{month_gmv}/g, fmt(rd.monthData.gmv))
+    .replace(/{month_orders}/g, fmt(rd.monthData.orders))
+    .replace(/{month_ads}/g, fmt(rd.monthData.ads))
+    .replace(/{month_avg}/g, fmt(Math.round(rd.monthAvg)))
+    .replace(/{month_roas}/g, rd.monthRoas.toFixed(1))
+    .replace(/{month_mk_pct}/g, rd.monthMkPct.toFixed(1))
+    .replace(/{month_mk_status}/g, rd.monthMkPct<=MK_TARGET?'✅':'🔴')
+    // MK warnings
+    .replace(/{mk_warnings}/g, rd.mkWarnings)
+    .replace(/{mk_target}/g, MK_TARGET)
+    // FC
+    .replace(/{fc_target}/g, fmt(rd.fcTarget))
+    .replace(/{fc_pct}/g, rd.fcPct.toFixed(1))
+    .replace(/{fc_gap}/g, fmt(Math.round(rd.fcGap)))
+    .replace(/{fc_daily_need}/g, fmt(Math.round(rd.fcDailyNeed)))
+    .replace(/{fc_bar}/g, rd.fcBar)
+    // Platform daily
+    .replace(/{plat_daily_rows}/g, rd.platDailyRows)
+    // Legacy compat
+    .replace(/{gmv}/g, fmt(rd.monthData.gmv))
+    .replace(/{orders}/g, fmt(rd.monthData.orders))
+    .replace(/{ads}/g, fmt(rd.monthData.ads))
+    .replace(/{roas}/g, rd.monthRoas.toFixed(1))
+    .replace(/{roas_status}/g, rd.monthRoas>=ROAS_TARGET?'✅':'⚠️')
+    .replace(/{tt_gmv}/g, fmt(rd.monthData.byPlat.tt?.gmv||0))
+    .replace(/{sp_gmv}/g, fmt(rd.monthData.byPlat.sp?.gmv||0))
+    .replace(/{lz_gmv}/g, fmt(rd.monthData.byPlat.lz?.gmv||0))
     .replace(/{nm_target}/g, NM_TARGET)
-    .replace(/{roas_target}/g, ROAS_TARGET);
-
-  document.getElementById('lineSum').textContent = sumText;
-
-  // Replace brand variables
-  const brandRowsText = brandKeys.map(b=>{
-    const d2=byBrand[b];
-    const icon=d2.nm_pct>=NM_TARGET?'🟢':d2.nm_pct>=6?'🟡':'🔴';
-    return brandRowTpl
-      .replace(/{b_icon}/g, icon)
-      .replace(/{b_name}/g, b)
-      .replace(/{b_gmv}/g, fmt(d2.gmv))
-      .replace(/{b_nm_pct}/g, d2.nm_pct.toFixed(1))
-      .replace(/{b_orders}/g, fmt(d2.orders||0))
-      .replace(/{b_roas}/g, (d2.ads>0?d2.gmv/d2.ads:0).toFixed(1))
-      .replace(/{b_ads}/g, fmt(d2.ads||0));
-  }).join('\n');
-
-  const warnings=brandKeys.filter(b=>byBrand[b].nm_pct<NM_TARGET);
-  const warningsText = warnings.length
-    ? '🚨 ต้องดูแลด่วน:\n'+warnings.map(b=>`⚠️ ${b} → NM ${byBrand[b].nm_pct.toFixed(1)}%`).join('\n')
-    : '✅ ทุกแบรนด์ผ่านเป้า NM!';
-
-  let brandText = brandTpl
-    .replace(/{date}/g, dateLabel)
-    .replace(/{brand_rows}/g, brandRowsText)
-    .replace(/{warnings}/g, warningsText);
-
-  document.getElementById('lineBrandMsg').textContent = brandText;
+    .replace(/{roas_target}/g, ROAS_TARGET)
+    .replace(/{nm_pct}/g, (rd.monthData.gmv>0?rd.monthData.nm/rd.monthData.gmv*100:0).toFixed(1))
+    .replace(/{nm_status}/g, (rd.monthData.gmv>0?rd.monthData.nm/rd.monthData.gmv*100:0)>=NM_TARGET?'✅':'⚠️')
+    .replace(/{motivation}/g, rd.motivation);
 }
 
 // ============================================================
 // FORECAST TAB
 // ============================================================
 const FC_MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const FC_PLAT = [{k:'tt',label:'TikTok',color:'var(--tt)'},{k:'sp',label:'Shopee',color:'var(--sp)'},{k:'lz',label:'Lazada',color:'var(--lz)'}];
+const FC_PLAT_DEFAULT = [{k:'tt',label:'TikTok',color:'#ff6b6b'},{k:'sp',label:'Shopee',color:'#ffa94d'},{k:'lz',label:'Lazada',color:'#a78bfa'}];
+var FC_PLAT = FC_PLAT_DEFAULT.slice();
+function loadFcPlat(){ FC_PLAT = Array.isArray(DB.forecastPlatforms)&&DB.forecastPlatforms.length?DB.forecastPlatforms:FC_PLAT_DEFAULT.slice(); }
+
+function getBrandPlats(brand){
+  // Return only the platforms mapped for this brand
+  if(DB.brandPlatMap && DB.brandPlatMap[brand] && DB.brandPlatMap[brand].length>0){
+    return FC_PLAT.filter(p=>DB.brandPlatMap[brand].includes(p.k));
+  }
+  return FC_PLAT; // default = all platforms
+}
 
 function renderForecast(){
+  loadFcPlat();
   if(!DB.forecastGMV) DB.forecastGMV = {};
   const brands = DB.brands||[];
   const tbody = document.getElementById('fcTbody');
@@ -2340,17 +3195,20 @@ function renderForecast(){
   let html = '';
   brands.forEach((brand, bi)=>{
     const color = EMP_COLORS[bi%EMP_COLORS.length];
-    if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={tt:Array(12).fill(0),sp:Array(12).fill(0),lz:Array(12).fill(0)};
+    if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={};
     const bData = DB.forecastGMV[brand];
+    const brandPlats = getBrandPlats(brand);
+    const bPlatCount = brandPlats.length;
+    if(bPlatCount===0) return;
 
-    FC_PLAT.forEach((p,pi)=>{
+    brandPlats.forEach((p,pi)=>{
       if(!bData[p.k]) bData[p.k]=Array(12).fill(0);
       const vals = bData[p.k];
       const yearTotal = vals.reduce((a,b)=>a+b,0);
 
       html += `<tr class="fc-plat-row" data-brand="${brand}" data-plat="${p.k}">`;
       if(pi===0){
-        html += `<td rowspan="3" class="fc-sticky-brand" style="font-weight:700;color:${color};vertical-align:middle;text-align:center;padding:6px;">${brand}</td>`;
+        html += `<td rowspan="${bPlatCount}" class="fc-sticky-brand" style="font-weight:700;color:${color};vertical-align:middle;text-align:center;padding:6px;">${brand}</td>`;
       }
       html += `<td class="fc-sticky-plat" style="color:${p.color};font-size:11px;font-weight:600;padding:4px 8px;">${p.label}</td>`;
 
@@ -2366,7 +3224,7 @@ function renderForecast(){
     });
 
     // Sum row
-    const sumByMonth = Array(12).fill(0).map((_,mi)=>FC_PLAT.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
+    const sumByMonth = Array(12).fill(0).map((_,mi)=>brandPlats.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
     const sumYear = sumByMonth.reduce((a,b)=>a+b,0);
     html += `<tr class="fc-sum-row" id="fcSum_${brand.replace(/[^a-z0-9]/gi,'_')}">
       <td colspan="2" class="fc-sticky-brand" style="font-weight:700;color:${color};font-size:12px;text-align:left;padding:5px 10px;">รวม ${brand}</td>
@@ -2388,24 +3246,21 @@ function renderFCSummaryStrip(monthIdx){
   const brands = DB.brands||[];
   strip.innerHTML = brands.map((b,bi)=>{
     const bData = DB.forecastGMV[b]||{};
-    const tt = bData.tt?.[monthIdx]||0;
-    const sp = bData.sp?.[monthIdx]||0;
-    const lz = bData.lz?.[monthIdx]||0;
-    const total = tt+sp+lz;
+    const bPlats = getBrandPlats(b);
+    const total = bPlats.reduce((s,p)=>(bData[p.k]?.[monthIdx]||0)+s,0);
     const color = EMP_COLORS[bi%EMP_COLORS.length];
+    const platDetail = bPlats.map(p=>`<span style="color:${p.color};">${p.label.substring(0,3)} ${fmt(bData[p.k]?.[monthIdx]||0)}</span>`).join(' ');
     return total>0?`<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${color};border-radius:8px;padding:10px 14px;min-width:160px;">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">${b}</div>
       <div style="font-size:16px;font-weight:700;color:${color};">฿${fmt(total)}</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px;">
-        🔴${fmt(tt)} 🟠${fmt(sp)} 🟣${fmt(lz)}
-      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;">${platDetail}</div>
     </div>`:'';
   }).join('');
 }
 
 function fcUpdate(brand, plat, monthIdx, value){
   if(!DB.forecastGMV) DB.forecastGMV={};
-  if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={tt:Array(12).fill(0),sp:Array(12).fill(0),lz:Array(12).fill(0)};
+  if(!DB.forecastGMV[brand]) DB.forecastGMV[brand]={};
   if(!DB.forecastGMV[brand][plat]) DB.forecastGMV[brand][plat]=Array(12).fill(0);
   DB.forecastGMV[brand][plat][monthIdx] = parseFloat(value)||0;
 
@@ -2414,7 +3269,8 @@ function fcUpdate(brand, plat, monthIdx, value){
   const sumRow = document.getElementById('fcSum_'+safeId);
   if(sumRow){
     const bData = DB.forecastGMV[brand];
-    const sumByMonth = Array(12).fill(0).map((_,mi)=>FC_PLAT.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
+    const bPlats = getBrandPlats(brand);
+    const sumByMonth = Array(12).fill(0).map((_,mi)=>bPlats.reduce((s,p)=>(bData[p.k]?.[mi]||0)+s,0));
     const sumYear = sumByMonth.reduce((a,b)=>a+b,0);
     const cells = sumRow.querySelectorAll('td');
     sumByMonth.forEach((v,i)=>{ if(cells[i+2]) cells[i+2].textContent = v>0?'฿'+fmt(v):'-'; });
@@ -2448,7 +3304,7 @@ function renderForecastCharts(){
 
   // GMV Target vs Actual (เดือนที่เลือก)
   mkChart('cForecastGMV',{type:'bar',data:{labels:brands,datasets:[
-    {label:'Target',data:brands.map(b=>FC_PLAT.reduce((s,p)=>(DB.forecastGMV[b]?.[p.k]?.[mi]||0)+s,0)),backgroundColor:'rgba(255,209,102,.5)',borderRadius:4},
+    {label:'Target',data:brands.map(b=>getBrandPlats(b).reduce((s,p)=>(DB.forecastGMV[b]?.[p.k]?.[mi]||0)+s,0)),backgroundColor:'rgba(255,209,102,.5)',borderRadius:4},
     {label:'Actual',data:brands.map(b=>byBrand[b]?.gmv||0),backgroundColor:'rgba(108,99,255,.75)',borderRadius:4}
   ]},options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0',callback:v=>'฿'+fmt(v)},grid:{color:'rgba(255,255,255,.03)'}}},plugins:{legend:{labels:{color:'#8892b0'}}}}});
 
@@ -2799,8 +3655,8 @@ function renderAPM(){
       <td><input class="cell left" type="text" value="${(task.task||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'task',this.value)" placeholder="ชื่องาน / task..." style="min-width:220px"></td>
       <td><input class="cell left" type="text" value="${(task.detail||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'detail',this.value)" placeholder="รายละเอียดงาน..." style="min-width:200px"></td>
       <td><select class="cell left ${sCls}" onchange="apmUpdate(${tid},'status',this.value);this.className='cell left '+(APM_STATUS.find(s=>s.v===this.value)||APM_STATUS[0]).cls;refreshAPMSummary()" style="min-width:125px">${statOpts}</select></td>
-      <td><input class="cell" type="date" value="${task.startDate||''}" onchange="apmUpdate(${tid},'startDate',this.value)" style="min-width:110px"></td>
-      <td><input class="cell" type="date" value="${task.due||''}" onchange="apmUpdate(${tid},'due',this.value)" style="min-width:110px"></td>
+      <td><input class="cell" type="text" readonly data-datepicker="true" value="${task.startDate||''}" onclick="openDatePicker(this)" onchange="apmUpdate(${tid},'startDate',this.value)" style="min-width:110px;cursor:pointer;" placeholder="เลือกวัน"></td>
+      <td><input class="cell" type="text" readonly data-datepicker="true" value="${task.due||''}" onclick="openDatePicker(this)" onchange="apmUpdate(${tid},'due',this.value)" style="min-width:110px;cursor:pointer;" placeholder="เลือกวัน"></td>
       <td><input class="cell left" type="text" value="${(task.note||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'note',this.value)" placeholder="หมายเหตุ..." style="min-width:180px"></td>
       <td style="padding:4px 6px;"><button class="btn btn-danger btn-sm" onclick="deleteAPMTask(${tid})">✕</button></td>
     </tr>`;
@@ -3160,6 +4016,7 @@ async function loadUserManagement(){
         actions += '<button class="btn-reject" onclick="adminApproveUser(' + u.id + ',\'reject\')">ปฏิเสธ</button>';
       } else if(u.status === 'approved'){
         actions = '<button class="btn-set-tabs" onclick="openTabPermModal(' + u.id + ',\'' + (u.name||'').replace(/'/g,"\\'") + '\',\'' + (u.visibleTabs||'') + '\',' + (u.isAdmin?'true':'false') + ')">กำหนด Tab</button> ';
+        actions += '<button class="btn-set-tabs" style="background:#e67e22;" onclick="openEditPermModal(' + u.id + ',\'' + (u.name||'').replace(/'/g,"\\'") + '\',\'' + (u.editableTabs||'') + '\',' + (u.isAdmin?'true':'false') + ')">สิทธิ์แก้ไข</button> ';
         actions += '<button class="btn-reject" onclick="adminApproveUser(' + u.id + ',\'reject\')" style="font-size:10px;">ระงับ</button>';
       } else if(u.status === 'rejected'){
         actions = '<button class="btn-approve" onclick="adminApproveUser(' + u.id + ',\'approve\')" style="font-size:10px;">อนุมัติใหม่</button>';
@@ -3191,7 +4048,7 @@ var ALL_TAB_DEFS = [
   {key:'ads_eff', label:'Ads Efficiency'},
   {key:'line', label:'LINE Data'},
   {key:'forecast', label:'Forecast'},
-  {key:'apm', label:'APM Task'},
+  {key:'apm', label:'Current Task'},
   {key:'audit', label:'Audit Log'}
 ];
 
@@ -3319,6 +4176,133 @@ function applyTabVisibility(){
   }
 }
 
+// ============================================================
+// EDIT PERMISSION — control which tabs user can edit
+// ============================================================
+function openEditPermModal(userId, userName, currentTabs, isAdmin){
+  if(isAdmin){
+    showToast('Admin แก้ไขทุก tab ได้เสมอ');
+    return;
+  }
+  var selected = currentTabs ? currentTabs.split(',') : [];
+  var allSelected = selected.length === 0; // empty = all editable
+  var html = '<div class="tab-perm-overlay" id="editPermOverlay" onclick="if(event.target===this)closeEditPermModal()">';
+  html += '<div class="tab-perm-modal">';
+  html += '<h3>กำหนดสิทธิ์แก้ไข</h3>';
+  html += '<div class="sub">"' + userName + '" — ติ๊กเฉพาะ tab ที่อนุญาตให้แก้ไข (ไม่ติ๊ก = แก้ไขได้ทุก tab)</div>';
+  html += '<div style="margin-bottom:10px;"><label style="font-size:12px;cursor:pointer;"><input type="checkbox" id="editPermAll" onchange="toggleAllEditPerm(this)" ' + (allSelected ? 'checked' : '') + '> แก้ไขได้ทุก Tab</label></div>';
+  html += '<div class="tab-perm-grid" id="editPermGrid">';
+  ALL_TAB_DEFS.forEach(function(t){
+    var checked = allSelected || selected.includes(t.key);
+    html += '<label class="tab-perm-item' + (checked ? ' checked' : '') + '">';
+    html += '<input type="checkbox" value="' + t.key + '" ' + (checked ? 'checked' : '') + ' onchange="updateEditPermItem(this)" ' + (allSelected ? 'disabled' : '') + '>';
+    html += t.label + '</label>';
+  });
+  html += '</div>';
+  html += '<div class="tab-perm-actions">';
+  html += '<button class="btn btn-ghost btn-sm" onclick="closeEditPermModal()">ยกเลิก</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveEditPerm(' + userId + ')">บันทึก</button>';
+  html += '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeEditPermModal(){
+  var el = document.getElementById('editPermOverlay');
+  if(el) el.remove();
+}
+
+function toggleAllEditPerm(cb){
+  var grid = document.getElementById('editPermGrid');
+  var boxes = grid.querySelectorAll('input[type=checkbox]');
+  boxes.forEach(function(b){
+    b.disabled = cb.checked;
+    b.checked = cb.checked;
+    b.parentElement.classList.toggle('checked', cb.checked);
+  });
+}
+
+function updateEditPermItem(cb){
+  cb.parentElement.classList.toggle('checked', cb.checked);
+  var allCb = document.getElementById('editPermAll');
+  if(!cb.checked && allCb) allCb.checked = false;
+}
+
+async function saveEditPerm(userId){
+  var allCb = document.getElementById('editPermAll');
+  var editableTabs = '';
+  if(!allCb.checked){
+    var grid = document.getElementById('editPermGrid');
+    var boxes = grid.querySelectorAll('input[type=checkbox]:checked');
+    var keys = [];
+    boxes.forEach(function(b){ keys.push(b.value); });
+    editableTabs = keys.join(',');
+  }
+  try {
+    var res = await apiFetch(API_BASE + '/api/admin/set-editable-tabs', {
+      method: 'POST',
+      body: JSON.stringify({ userId: userId, editableTabs: editableTabs })
+    });
+    var data = await res.json();
+    if(data.success){
+      showToast('✅ บันทึกสิทธิ์แก้ไขแล้ว');
+      closeEditPermModal();
+      loadUserManagement();
+    } else {
+      showToast('❌ ' + (data.error||'เกิดข้อผิดพลาด'));
+    }
+  } catch(e){
+    showToast('❌ ' + e.message);
+  }
+}
+
+// Apply edit permission — make tabs read-only if user can't edit
+function applyEditPermission(){
+  var isAdmin = false;
+  if(AUTH_TOKEN){
+    try {
+      var parts = AUTH_TOKEN.split('.');
+      if(parts.length === 3){
+        var payload = JSON.parse(atob(parts[1]));
+        if(payload.isAdmin) isAdmin = true;
+      }
+    } catch(e){}
+  }
+  if(isAdmin) return; // admin can edit everything
+
+  // Get editable_tabs from current user
+  var editableTabs = '';
+  if(DB.employees && Array.isArray(DB.employees)){
+    var me = DB.employees.find(function(e){ return e.name === CURRENT_USER || e.email === CURRENT_USER; });
+    if(me && me.editableTabs) editableTabs = me.editableTabs;
+  }
+  if(!editableTabs) return; // empty = all editable
+
+  var allowed = editableTabs.split(',');
+
+  // For each tab content section, if not in allowed list, disable all inputs
+  TAB_INDEX_TO_KEY.forEach(function(key, idx){
+    if(allowed.includes(key)) return; // user can edit this tab
+    // Find the tab content panel
+    var panels = document.querySelectorAll('.tab-content');
+    if(panels[idx]){
+      var inputs = panels[idx].querySelectorAll('input, select, textarea');
+      inputs.forEach(function(inp){
+        inp.disabled = true;
+        inp.style.opacity = '0.5';
+        inp.style.cursor = 'not-allowed';
+      });
+      // Hide save buttons in read-only tabs
+      var btns = panels[idx].querySelectorAll('button.btn-success, button[onclick*="save"]');
+      btns.forEach(function(btn){
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'คุณไม่มีสิทธิ์แก้ไข tab นี้';
+      });
+    }
+  });
+}
+
 async function adminApproveUser(userId, action){
   try {
     var res = await apiFetch(API_BASE + '/api/admin/approve-user', {
@@ -3379,6 +4363,155 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 // Also fix the monthTasks reference inside renderAPM for the select onchange closures
 // (handled inline via re-call of renderAPMSummary with the correct scope)
+
+// ============================================================
+// CUSTOM DATE PICKER
+// ============================================================
+(function(){
+  const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const TH_DAYS = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+  let _dpTarget = null;
+  let _dpYear = 2026;
+  let _dpMonth = 2; // 0-based
+  let _dpSelected = null;
+  let _dpCallback = null;
+
+  // Create overlay once
+  const overlay = document.createElement('div');
+  overlay.className = 'dp-overlay';
+  overlay.innerHTML = `
+    <div class="dp-box">
+      <div class="dp-header">
+        <button class="dp-nav" id="dpPrev">&#8249;</button>
+        <span class="dp-month-label" id="dpMonthLabel"></span>
+        <button class="dp-nav" id="dpNext">&#8250;</button>
+      </div>
+      <div class="dp-weekdays">${TH_DAYS.map(d=>'<span>'+d+'</span>').join('')}</div>
+      <div class="dp-days" id="dpDays"></div>
+      <div class="dp-footer">
+        <button class="dp-btn dp-btn-cancel" id="dpCancel">ยกเลิก</button>
+        <button class="dp-btn dp-btn-ok" id="dpOk">ตกลง</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) closePicker(); });
+  document.getElementById('dpCancel').addEventListener('click', closePicker);
+  document.getElementById('dpOk').addEventListener('click', confirmPicker);
+  document.getElementById('dpPrev').addEventListener('click', function(){ _dpMonth--; if(_dpMonth<0){_dpMonth=11;_dpYear--;} renderDays(); });
+  document.getElementById('dpNext').addEventListener('click', function(){ _dpMonth++; if(_dpMonth>11){_dpMonth=0;_dpYear++;} renderDays(); });
+
+  function renderDays(){
+    document.getElementById('dpMonthLabel').textContent = TH_MONTHS[_dpMonth]+' '+_dpYear;
+    const grid = document.getElementById('dpDays');
+    grid.innerHTML = '';
+    const first = new Date(_dpYear, _dpMonth, 1);
+    const startDay = first.getDay(); // 0=Sun
+    const daysInMonth = new Date(_dpYear, _dpMonth+1, 0).getDate();
+    const daysInPrev = new Date(_dpYear, _dpMonth, 0).getDate();
+    const today = new Date();
+    const todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+
+    // Previous month fill
+    for(let i=startDay-1;i>=0;i--){
+      const d=daysInPrev-i;
+      const el=document.createElement('div');
+      el.className='dp-day other';
+      el.textContent=d;
+      const pm=_dpMonth===0?11:_dpMonth-1;
+      const py=_dpMonth===0?_dpYear-1:_dpYear;
+      el.dataset.date=py+'-'+String(pm+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      el.addEventListener('click',dayClick);
+      grid.appendChild(el);
+    }
+
+    // Current month
+    for(let d=1;d<=daysInMonth;d++){
+      const el=document.createElement('div');
+      const ds=_dpYear+'-'+String(_dpMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      el.className='dp-day';
+      if(ds===todayStr) el.classList.add('today');
+      if(ds===_dpSelected) el.classList.add('selected');
+      el.textContent=d;
+      el.dataset.date=ds;
+      el.addEventListener('click',dayClick);
+      grid.appendChild(el);
+    }
+
+    // Next month fill
+    const totalCells = startDay + daysInMonth;
+    const remaining = totalCells%7===0 ? 0 : 7-totalCells%7;
+    for(let d=1;d<=remaining;d++){
+      const el=document.createElement('div');
+      el.className='dp-day other';
+      el.textContent=d;
+      const nm=_dpMonth===11?0:_dpMonth+1;
+      const ny=_dpMonth===11?_dpYear+1:_dpYear;
+      el.dataset.date=ny+'-'+String(nm+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      el.addEventListener('click',dayClick);
+      grid.appendChild(el);
+    }
+  }
+
+  function dayClick(e){
+    _dpSelected = e.target.dataset.date;
+    // Parse to navigate to correct month if clicking other-month days
+    const parts=_dpSelected.split('-');
+    _dpYear=parseInt(parts[0]);
+    _dpMonth=parseInt(parts[1])-1;
+    renderDays();
+  }
+
+  function closePicker(){
+    overlay.classList.remove('show');
+    setTimeout(function(){ overlay.style.display='none'; },200);
+  }
+
+  function confirmPicker(){
+    if(_dpSelected && _dpTarget){
+      // Update the input value
+      _dpTarget.value = _dpSelected;
+      // Trigger change event
+      _dpTarget.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    if(_dpSelected && _dpCallback){
+      _dpCallback(_dpSelected);
+    }
+    closePicker();
+  }
+
+  // Public API
+  window.openDatePicker = function(inputEl, callback){
+    _dpTarget = inputEl||null;
+    _dpCallback = callback||null;
+    // Parse current value
+    const val = inputEl ? inputEl.value : '';
+    if(val && /^\d{4}-\d{2}-\d{2}$/.test(val)){
+      const p=val.split('-');
+      _dpYear=parseInt(p[0]);
+      _dpMonth=parseInt(p[1])-1;
+      _dpSelected=val;
+    } else {
+      const now=new Date();
+      _dpYear=now.getFullYear();
+      _dpMonth=now.getMonth();
+      _dpSelected=null;
+    }
+    renderDays();
+    overlay.style.display='flex';
+    requestAnimationFrame(function(){ overlay.classList.add('show'); });
+  };
+
+  // Intercept clicks on any remaining date inputs or datepicker-tagged inputs
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    if(t.matches('input[type="date"], input[data-datepicker]')){
+      e.preventDefault();
+      t.blur();
+      openDatePicker(t);
+    }
+  }, true);
+})();
 </script>
 </body>
 </html>
