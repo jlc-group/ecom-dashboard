@@ -6,10 +6,10 @@
 -- Add new columns (IF NOT EXISTS prevents errors if already added)
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS google_id TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS picture TEXT;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
 -- status values: 'pending', 'approved', 'rejected'
 
--- Existing employees are auto-approved
+-- Existing employees (ที่อยู่ก่อน migration) auto-approved
 UPDATE employees SET status = 'approved' WHERE status IS NULL OR status = '';
 
 -- Index for fast lookup by email and google_id

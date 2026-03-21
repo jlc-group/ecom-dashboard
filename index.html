@@ -3537,8 +3537,8 @@ function getMyEmployee(){
 function isAdminUser(){
   if(!CURRENT_USER) return true; // ถ้ายังไม่ได้เลือก user ให้เห็นทั้งหมด (local mode)
   const me = getMyEmployee();
-  // ถ้าไม่เจอใน employee list ให้ถือว่าเป็น admin (เช่น owner ที่ไม่ได้เพิ่มไว้)
-  if(!me) return true;
+  // ถ้าไม่เจอใน employee list → ไม่ใช่ admin (ป้องกันคนที่ยังไม่ได้รับอนุมัติเห็น task ทั้งหมด)
+  if(!me) return false;
   return me.isAdmin === true;
 }
 
