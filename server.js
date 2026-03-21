@@ -490,6 +490,9 @@ app.put('/api/data', requireAuth, async (req, res) => {
     // --- APM Tasks ---
     if (Array.isArray(db.apmTasks)) {
       await client.query('DELETE FROM apm_tasks');
+      await client.query("SELECT setval(pg_get_serial_sequence('apm_tasks','id'), 1, false)").catch(function(){
+        return client.query("CREATE SEQUENCE IF NOT EXISTS apm_tasks_id_seq; ALTER TABLE apm_tasks ALTER COLUMN id SET DEFAULT nextval('apm_tasks_id_seq'); SELECT setval('apm_tasks_id_seq', 1, false);");
+      });
       for (const t of db.apmTasks) {
         await client.query(
           'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
@@ -792,6 +795,11 @@ app.put('/api/apm-tasks', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM apm_tasks');
+    // Ensure SERIAL sequence exists and reset it
+    await client.query("SELECT setval(pg_get_serial_sequence('apm_tasks','id'), 1, false)").catch(function(){
+      // If no sequence, create one
+      return client.query("CREATE SEQUENCE IF NOT EXISTS apm_tasks_id_seq; ALTER TABLE apm_tasks ALTER COLUMN id SET DEFAULT nextval('apm_tasks_id_seq'); SELECT setval('apm_tasks_id_seq', 1, false);");
+    });
     for (const t of req.body.tasks || []) {
       await client.query(
         'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
