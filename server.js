@@ -487,17 +487,12 @@ app.put('/api/data', requireAuth, async (req, res) => {
       await client.query("INSERT INTO config (key, value) VALUES ('line_brand_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineBrandSendTime || '']);
     }
 
-    // --- Employees (preserve google_id, status, picture) ---
+    // --- Employees: อัพเดตเฉพาะ name, brands, note, is_admin ของคนที่มีอยู่แล้ว ---
+    // ไม่ INSERT/DELETE พนักงาน — ใช้ปุ่ม "บันทึกพนักงาน" หรือ Google login แทน
     if (Array.isArray(db.employees)) {
-      var existingEmps = await client.query('SELECT id, email, google_id, status, picture FROM employees');
+      var existingEmps = await client.query('SELECT id, email FROM employees');
       var empMap = {};
       existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
-      var newEmpEmails = db.employees.map(function(e){ return (e.email||'').toLowerCase(); }).filter(Boolean);
-      for (var row of existingEmps.rows) {
-        if(row.email && !newEmpEmails.includes(row.email.toLowerCase())){
-          await client.query('DELETE FROM employees WHERE id = $1', [row.id]);
-        }
-      }
       for (var emp of db.employees) {
         var empKey = (emp.email||'').toLowerCase();
         var exEmp = empMap[empKey];
@@ -506,12 +501,8 @@ app.put('/api/data', requireAuth, async (req, res) => {
             'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5',
             [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, exEmp.id]
           );
-        } else {
-          await client.query(
-            'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
-            [emp.name||'', emp.email||'', emp.brands||'', emp.note||'', emp.isAdmin||false, 'pending']
-          );
         }
+        // ไม่ INSERT ใหม่ และไม่ DELETE — จัดการผ่านหน้า admin เท่านั้น
       }
     }
 
