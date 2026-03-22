@@ -379,7 +379,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
       pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index'),
-      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','forecast_platforms','brand_plat_map')"),
+      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','line_reminder_send_time','reminder_template','forecast_platforms','brand_plat_map')"),
     ]);
 
     // Build brandTargets & brandNames from brands table
@@ -432,6 +432,13 @@ app.get('/api/data', requireAuth, async (req, res) => {
       lineSendTime: configMap['line_send_time'] || '09:00',
       lineSumSendTime: configMap['line_sum_send_time'] || '',
       lineBrandSendTime: configMap['line_brand_send_time'] || '',
+      lineReminderSendTime: configMap['line_reminder_send_time'] || '17:00',
+      reminderTitle: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').title; } catch(e){} return undefined; })(),
+      reminderItem1Title: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item1Title; } catch(e){} return undefined; })(),
+      reminderItem1Desc: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item1Desc; } catch(e){} return undefined; })(),
+      reminderItem2Title: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item2Title; } catch(e){} return undefined; })(),
+      reminderItem2Desc: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item2Desc; } catch(e){} return undefined; })(),
+      reminderThankMsg: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').thankMsg; } catch(e){} return undefined; })(),
     });
   } catch (err) {
     console.error('GET /api/data error:', err);
@@ -510,6 +517,20 @@ app.put('/api/data', requireAuth, async (req, res) => {
     }
     if (db.lineBrandSendTime !== undefined) {
       await client.query("INSERT INTO config (key, value) VALUES ('line_brand_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineBrandSendTime || '']);
+    }
+    if (db.lineReminderSendTime !== undefined) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_reminder_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineReminderSendTime || '17:00']);
+    }
+    // --- Reminder Template ---
+    var reminderTpl = {};
+    if (db.reminderTitle !== undefined) reminderTpl.title = db.reminderTitle;
+    if (db.reminderItem1Title !== undefined) reminderTpl.item1Title = db.reminderItem1Title;
+    if (db.reminderItem1Desc !== undefined) reminderTpl.item1Desc = db.reminderItem1Desc;
+    if (db.reminderItem2Title !== undefined) reminderTpl.item2Title = db.reminderItem2Title;
+    if (db.reminderItem2Desc !== undefined) reminderTpl.item2Desc = db.reminderItem2Desc;
+    if (db.reminderThankMsg !== undefined) reminderTpl.thankMsg = db.reminderThankMsg;
+    if (Object.keys(reminderTpl).length > 0) {
+      await client.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(reminderTpl)]);
     }
 
     // --- Employees: อัพเดตเฉพาะ name, brands, note, is_admin ของคนที่มีอยู่แล้ว ---
@@ -1379,11 +1400,24 @@ app.post('/api/line/send-report', async (req, res) => {
     if (!token) return res.status(400).json({ error: 'LINE token not configured — ใส่ใน Config tab' });
     if (!groupId) return res.status(400).json({ error: 'LINE group ID not configured — ใส่ใน Config tab' });
 
-    // ดึง reminder template จาก DB
+    // ดึง reminder template + send time จาก config table
     var dbData = {};
     try {
-      var { rows: dataRows } = await pool.query("SELECT data FROM data LIMIT 1");
-      if (dataRows.length > 0 && dataRows[0].data) dbData = dataRows[0].data;
+      var { rows: rCfgRows } = await pool.query("SELECT key, value FROM config WHERE key IN ('line_reminder_send_time','reminder_template')");
+      rCfgRows.forEach(function(r) {
+        if (r.key === 'line_reminder_send_time') dbData.lineReminderSendTime = r.value;
+        if (r.key === 'reminder_template') {
+          try {
+            var tpl = JSON.parse(r.value);
+            dbData.reminderTitle = tpl.title;
+            dbData.reminderItem1Title = tpl.item1Title;
+            dbData.reminderItem1Desc = tpl.item1Desc;
+            dbData.reminderItem2Title = tpl.item2Title;
+            dbData.reminderItem2Desc = tpl.item2Desc;
+            dbData.reminderThankMsg = tpl.thankMsg;
+          } catch(e2) {}
+        }
+      });
     } catch(e) {}
 
     // เช็คว่าถึงเวลาส่งหรือยัง (current time >= sendTime)
