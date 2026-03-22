@@ -1341,6 +1341,291 @@ app.post('/api/line/send', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/line/send-report — ส่งข้อความ LINE ตามเวลาที่ตั้งในแดชบอร์ด
+// แต่ละข้อความส่งแค่ 1 ครั้ง/วัน — ระบบจำว่าส่งไปแล้ววันไหน
+// query: ?all=1 — ส่งทุกข้อความ (ไม่สน sent_today)
+app.post('/api/line/send-report', async (req, res) => {
+  try {
+    var sendAll = req.query.all === '1' || req.body.all === '1';
+
+    // เวลาปัจจุบัน (ไทย UTC+7)
+    var now = new Date(Date.now() + 7*60*60*1000);
+    var nowHH = now.getUTCHours();
+    var nowMM = now.getUTCMinutes();
+    var nowTime = String(nowHH).padStart(2,'0') + ':' + String(nowMM).padStart(2,'0');
+    var todayStr = now.toISOString().substring(0, 10);
+
+    // ดึง sent log จาก config table
+    var sentLog = {};
+    try {
+      var { rows: sentRows } = await pool.query("SELECT value FROM config WHERE key = 'line_sent_log'");
+      if (sentRows.length > 0) sentLog = JSON.parse(sentRows[0].value || '{}');
+    } catch(e) {}
+
+    // ดึง schedule data
+    var http = require('http');
+    var schedResp = await new Promise(function(resolve, reject) {
+      http.get('http://localhost:' + PORT + '/api/line/schedule', function(resp) {
+        var body = '';
+        resp.on('data', function(c) { body += c; });
+        resp.on('end', function() {
+          try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+        });
+      }).on('error', reject);
+    });
+
+    var token = schedResp.lineToken;
+    var groupId = schedResp.lineGroup;
+    if (!token) return res.status(400).json({ error: 'LINE token not configured — ใส่ใน Config tab' });
+    if (!groupId) return res.status(400).json({ error: 'LINE group ID not configured — ใส่ใน Config tab' });
+
+    // ดึง reminder template จาก DB
+    var dbData = {};
+    try {
+      var { rows: dataRows } = await pool.query("SELECT data FROM data LIMIT 1");
+      if (dataRows.length > 0 && dataRows[0].data) dbData = dataRows[0].data;
+    } catch(e) {}
+
+    // เช็คว่าถึงเวลาส่งหรือยัง (current time >= sendTime)
+    function isTimeToSend(sendTime) {
+      if (sendAll) return true;
+      if (!sendTime) return false;
+      var parts = sendTime.split(':');
+      var sHH = parseInt(parts[0]), sMM = parseInt(parts[1] || 0);
+      // ถึงเวลาแล้ว = ชั่วโมงปัจจุบัน >= ชั่วโมงที่ตั้ง (ให้ tolerance ภายใน 30 นาที)
+      var sMin = sHH * 60 + sMM;
+      var nMin = nowHH * 60 + nowMM;
+      return nMin >= sMin && nMin <= sMin + 29;
+    }
+
+    // เช็คว่าส่งไปแล้ววันนี้หรือยัง
+    function alreadySentToday(msgId) {
+      if (sendAll) return false;
+      return sentLog[msgId] === todayStr;
+    }
+
+    var https = require('https');
+    var results = [];
+    var skipped = [];
+
+    // Helper: ส่ง LINE Push
+    async function pushLine(lineMsg) {
+      var postData = JSON.stringify({ to: groupId, messages: [lineMsg] });
+      return new Promise(function(resolve, reject) {
+        var req2 = https.request({
+          hostname: 'api.line.me', path: '/v2/bot/message/push', method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'Content-Length': Buffer.byteLength(postData) }
+        }, function(resp) {
+          var body = '';
+          resp.on('data', function(c) { body += c; });
+          resp.on('end', function() { resolve({ status: resp.statusCode, body: body }); });
+        });
+        req2.on('error', reject);
+        req2.write(postData);
+        req2.end();
+      });
+    }
+
+    // 1) ส่ง schedule messages (summary, brand, custom)
+    for (var i = 0; i < schedResp.schedule.length; i++) {
+      var item = schedResp.schedule[i];
+
+      if (alreadySentToday(item.id)) {
+        skipped.push({ id: item.id, name: item.name, reason: 'already_sent_today' });
+        continue;
+      }
+      if (!isTimeToSend(item.sendTime)) {
+        skipped.push({ id: item.id, name: item.name, sendTime: item.sendTime, reason: 'not_yet' });
+        continue;
+      }
+
+      var lineMsg;
+      if (item.messageType === 'flex' && item.flex) {
+        lineMsg = { type: 'flex', altText: item.altText || item.name, contents: item.flex };
+      } else if (item.message) {
+        lineMsg = { type: 'text', text: item.message };
+      } else { continue; }
+
+      var result = await pushLine(lineMsg);
+      console.log('[LINE] sent', item.id, '→', result.status);
+      if (result.status === 200) sentLog[item.id] = todayStr;
+      results.push({ id: item.id, name: item.name, status: result.status });
+      await new Promise(function(r) { setTimeout(r, 500); });
+    }
+
+    // 2) ส่งข้อความเตือนทีม
+    var reminderTime = dbData.lineReminderSendTime || '17:00';
+    if (!alreadySentToday('team_reminder') && isTimeToSend(reminderTime)) {
+      var rt = dbData.reminderTitle || 'JLC ALL';
+      var t1 = dbData.reminderItem1Title || 'บันทึกสรุปงานวันนี้';
+      var d1 = dbData.reminderItem1Desc || 'กรอกข้อมูล task งานต่างๆ ลง Dashboard ให้ครบ';
+      var t2 = dbData.reminderItem2Title || 'เตรียมงานพรุ่งนี้';
+      var d2 = dbData.reminderItem2Desc || 'วางแผนและเตรียมสิ่งที่ต้องทำ ให้พร้อมก่อนกลับบ้าน';
+      var thk = dbData.reminderThankMsg || 'ขอบคุณทุกคนที่ตั้งใจทำงานในวันนี้ 💚';
+      var reminderFlex = {
+        type:'bubble',size:'mega',
+        header:{type:'box',layout:'vertical',contents:[{type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'🏢',size:'xxl',flex:0},
+          {type:'box',layout:'vertical',contents:[
+            {type:'text',text:rt,color:'#FFFFFF',size:'xl',weight:'bold'},
+            {type:'text',text:'Daily Reminder',color:'#B8E6C8',size:'xs'}
+          ],paddingStart:'md'}
+        ],alignItems:'center'}],background:{type:'linearGradient',angle:'135deg',startColor:'#1B5E20',endColor:'#388E3C'},paddingAll:'20px'},
+        body:{type:'box',layout:'vertical',contents:[
+          {type:'text',text:'📋 สรุปงานก่อนกลับบ้าน',weight:'bold',size:'md',color:'#1B5E20'},
+          {type:'separator',margin:'lg',color:'#E8F5E9'},
+          {type:'box',layout:'horizontal',contents:[
+            {type:'box',layout:'vertical',contents:[{type:'text',text:'✅',size:'md',align:'center'}],width:'32px',height:'32px',backgroundColor:'#E8F5E9',cornerRadius:'16px',justifyContent:'center',alignItems:'center',flex:0},
+            {type:'box',layout:'vertical',contents:[{type:'text',text:t1,weight:'bold',size:'sm',color:'#333333'},{type:'text',text:d1,size:'xs',color:'#888888',wrap:true}],paddingStart:'md'}
+          ],alignItems:'center',margin:'xl'},
+          {type:'box',layout:'horizontal',contents:[
+            {type:'box',layout:'vertical',contents:[{type:'text',text:'📌',size:'md',align:'center'}],width:'32px',height:'32px',backgroundColor:'#FFF3E0',cornerRadius:'16px',justifyContent:'center',alignItems:'center',flex:0},
+            {type:'box',layout:'vertical',contents:[{type:'text',text:t2,weight:'bold',size:'sm',color:'#333333'},{type:'text',text:d2,size:'xs',color:'#888888',wrap:true}],paddingStart:'md'}
+          ],alignItems:'center',margin:'xl'},
+          {type:'separator',margin:'xl',color:'#E8F5E9'},
+          {type:'box',layout:'vertical',contents:[
+            {type:'text',text:thk,size:'sm',color:'#FFFFFF',align:'center',weight:'bold',wrap:true}
+          ],background:{type:'linearGradient',angle:'90deg',startColor:'#2E7D32',endColor:'#43A047'},cornerRadius:'lg',paddingAll:'lg',margin:'xl'}
+        ],paddingAll:'20px',backgroundColor:'#FFFFFF'},
+        footer:{type:'box',layout:'vertical',contents:[{
+          type:'button',action:{type:'uri',label:'📊 เปิด Dashboard',uri:'https://ecom-dashboard.wejlc.com'},
+          style:'primary',color:'#1B5E20',height:'sm'
+        }],paddingAll:'16px',backgroundColor:'#F1F8E9'},
+        styles:{header:{separator:false},footer:{separator:false}}
+      };
+      var reminderResult = await pushLine({ type:'flex', altText:'📋 '+rt+' — สรุปงานก่อนกลับบ้าน', contents:reminderFlex });
+      console.log('[LINE] reminder →', reminderResult.status);
+      if (reminderResult.status === 200) sentLog['team_reminder'] = todayStr;
+      results.push({ id: 'team_reminder', name: 'Team Reminder', status: reminderResult.status });
+    } else {
+      var reason = alreadySentToday('team_reminder') ? 'already_sent_today' : 'not_yet';
+      skipped.push({ id: 'team_reminder', sendTime: reminderTime, reason: reason });
+    }
+
+    // บันทึก sent log ลง DB
+    await pool.query(
+      "INSERT INTO config (key, value) VALUES ('line_sent_log', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+      [JSON.stringify(sentLog)]
+    );
+
+    res.json({ success: true, currentTime: nowTime, today: todayStr, sent: results, skipped: skipped });
+  } catch (err) {
+    console.error('[LINE REPORT] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/line/send-reminder — ส่งข้อความเตือนทีม (Flex gradient)
+app.post('/api/line/send-reminder', requireAuth, async (req, res) => {
+  try {
+    var { rows: cfgRows } = await pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group')");
+    var cfg = {};
+    cfgRows.forEach(function(r){ cfg[r.key] = r.value; });
+
+    var token = cfg['line_token'];
+    var groupId = cfg['line_group'];
+    if (!token) return res.status(400).json({ error: 'LINE token not configured — ใส่ใน Config tab' });
+    if (!groupId) return res.status(400).json({ error: 'LINE group ID not configured — ใส่ใน Config tab' });
+
+    var flexContent = {
+      "type": "bubble",
+      "size": "mega",
+      "header": {
+        "type": "box", "layout": "vertical",
+        "contents": [{
+          "type": "box", "layout": "horizontal",
+          "contents": [
+            { "type": "text", "text": "🏢", "size": "xxl", "flex": 0 },
+            { "type": "box", "layout": "vertical", "contents": [
+              { "type": "text", "text": "JLC ALL", "color": "#FFFFFF", "size": "xl", "weight": "bold" },
+              { "type": "text", "text": "Daily Reminder", "color": "#B8E6C8", "size": "xs" }
+            ], "paddingStart": "md" }
+          ],
+          "alignItems": "center"
+        }],
+        "background": { "type": "linearGradient", "angle": "135deg", "startColor": "#1B5E20", "endColor": "#388E3C" },
+        "paddingAll": "20px"
+      },
+      "body": {
+        "type": "box", "layout": "vertical",
+        "contents": [
+          { "type": "text", "text": "📋 สรุปงานก่อนกลับบ้าน", "weight": "bold", "size": "md", "color": "#1B5E20" },
+          { "type": "separator", "margin": "lg", "color": "#E8F5E9" },
+          { "type": "box", "layout": "horizontal", "contents": [
+            { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "✅", "size": "md", "align": "center" }], "width": "32px", "height": "32px", "backgroundColor": "#E8F5E9", "cornerRadius": "16px", "justifyContent": "center", "alignItems": "center", "flex": 0 },
+            { "type": "box", "layout": "vertical", "contents": [
+              { "type": "text", "text": "บันทึกสรุปงานวันนี้", "weight": "bold", "size": "sm", "color": "#333333" },
+              { "type": "text", "text": "กรอกข้อมูล task งานต่างๆ ลง Dashboard ให้ครบ", "size": "xs", "color": "#888888", "wrap": true }
+            ], "paddingStart": "md" }
+          ], "alignItems": "center", "margin": "xl" },
+          { "type": "box", "layout": "horizontal", "contents": [
+            { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "📌", "size": "md", "align": "center" }], "width": "32px", "height": "32px", "backgroundColor": "#FFF3E0", "cornerRadius": "16px", "justifyContent": "center", "alignItems": "center", "flex": 0 },
+            { "type": "box", "layout": "vertical", "contents": [
+              { "type": "text", "text": "เตรียมงานพรุ่งนี้", "weight": "bold", "size": "sm", "color": "#333333" },
+              { "type": "text", "text": "วางแผนและเตรียมสิ่งที่ต้องทำ ให้พร้อมก่อนกลับบ้าน", "size": "xs", "color": "#888888", "wrap": true }
+            ], "paddingStart": "md" }
+          ], "alignItems": "center", "margin": "xl" },
+          { "type": "separator", "margin": "xl", "color": "#E8F5E9" },
+          { "type": "box", "layout": "vertical", "contents": [
+            { "type": "text", "text": "ขอบคุณทุกคนที่ตั้งใจทำงานในวันนี้ 💚", "size": "sm", "color": "#FFFFFF", "align": "center", "weight": "bold", "wrap": true }
+          ], "background": { "type": "linearGradient", "angle": "90deg", "startColor": "#2E7D32", "endColor": "#43A047" }, "cornerRadius": "lg", "paddingAll": "lg", "margin": "xl" }
+        ],
+        "paddingAll": "20px", "backgroundColor": "#FFFFFF"
+      },
+      "footer": {
+        "type": "box", "layout": "vertical",
+        "contents": [{
+          "type": "button",
+          "action": { "type": "uri", "label": "📊 เปิด Dashboard", "uri": "https://ecom-dashboard.wejlc.com" },
+          "style": "primary", "color": "#1B5E20", "height": "sm"
+        }],
+        "paddingAll": "16px", "backgroundColor": "#F1F8E9"
+      },
+      "styles": { "header": { "separator": false }, "footer": { "separator": false } }
+    };
+
+    var lineMsg = { type: 'flex', altText: '📋 JLC ALL — สรุปงานก่อนกลับบ้าน', contents: flexContent };
+
+    var https = require('https');
+    var postData = JSON.stringify({ to: groupId, messages: [lineMsg] });
+    var result = await new Promise(function(resolve, reject) {
+      var req2 = https.request({
+        hostname: 'api.line.me', path: '/v2/bot/message/push', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'Content-Length': Buffer.byteLength(postData) }
+      }, function(resp) {
+        var body = '';
+        resp.on('data', function(c) { body += c; });
+        resp.on('end', function() { resolve({ status: resp.statusCode, body: body }); });
+      });
+      req2.on('error', reject);
+      req2.write(postData);
+      req2.end();
+    });
+
+    console.log('[LINE REMINDER] status:', result.status, result.body);
+    if (result.status === 200) {
+      res.json({ success: true, message: 'ส่งเตือนทีมสำเร็จ!' });
+    } else {
+      res.json({ success: false, status: result.status, error: result.body });
+    }
+  } catch (err) {
+    console.error('[LINE REMINDER] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/line/reminder-preview — ดู Flex JSON สำหรับ preview
+app.get('/api/line/reminder-preview', function(req, res) {
+  var fs = require('fs');
+  var path = require('path');
+  try {
+    var json = fs.readFileSync(path.join(__dirname, 'flex-reminder.json'), 'utf8');
+    res.json(JSON.parse(json));
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================
 // Health check
 // ============================================================

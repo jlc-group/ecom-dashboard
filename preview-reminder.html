@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LINE Flex Message Preview — JLC ALL Reminder</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Helvetica Neue', 'Noto Sans Thai', sans-serif;
+    background: #E5DDD5;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  .phone-frame {
+    width: 375px;
+    background: #E5DDD5;
+    border-radius: 20px;
+    padding: 20px;
+  }
+  .label {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 12px;
+  }
+  /* Flex bubble */
+  .bubble {
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  }
+  /* Header */
+  .bubble-header {
+    background: linear-gradient(135deg, #1B5E20, #388E3C);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .bubble-header .emoji { font-size: 28px; }
+  .bubble-header .title { color: #fff; font-size: 20px; font-weight: 700; }
+  .bubble-header .sub { color: #B8E6C8; font-size: 11px; margin-top: 2px; }
+
+  /* Body */
+  .bubble-body {
+    background: #fff;
+    padding: 20px;
+  }
+  .body-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1B5E20;
+  }
+  .sep {
+    height: 1px;
+    background: #E8F5E9;
+    margin: 14px 0;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .icon-circle {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .icon-green { background: #E8F5E9; }
+  .icon-orange { background: #FFF3E0; }
+  .item-title { font-size: 14px; font-weight: 600; color: #333; }
+  .item-desc { font-size: 12px; color: #888; margin-top: 2px; line-height: 1.4; }
+
+  /* Thank you banner */
+  .thank-box {
+    background: linear-gradient(90deg, #2E7D32, #43A047);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 16px;
+    text-align: center;
+  }
+  .thank-box span {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Footer */
+  .bubble-footer {
+    background: #F1F8E9;
+    padding: 14px 16px;
+  }
+  .btn-dash {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: #1B5E20;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+  }
+  .btn-dash:hover { background: #2E7D32; }
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="label">LINE Flex Message Preview</div>
+
+  <div class="bubble">
+    <!-- Header -->
+    <div class="bubble-header">
+      <div class="emoji">🏢</div>
+      <div>
+        <div class="title">JLC ALL</div>
+        <div class="sub">Daily Reminder</div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="bubble-body">
+      <div class="body-title">📋 สรุปงานก่อนกลับบ้าน</div>
+      <div class="sep"></div>
+
+      <div class="item">
+        <div class="icon-circle icon-green">✅</div>
+        <div>
+          <div class="item-title">บันทึกสรุปงานวันนี้</div>
+          <div class="item-desc">กรอกยอดขาย ค่าแอด และข้อมูลต่าง ๆ ลง Dashboard ให้ครบ</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="icon-circle icon-orange">📌</div>
+        <div>
+          <div class="item-title">เตรียมงานพรุ่งนี้</div>
+          <div class="item-desc">วางแผนและเตรียมสิ่งที่ต้องทำ ให้พร้อมก่อนกลับบ้าน</div>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="thank-box">
+        <span>ขอบคุณทุกคนที่ตั้งใจทำงานในวันนี้ 💚</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="bubble-footer">
+      <button class="btn-dash">📊 เปิด Dashboard</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

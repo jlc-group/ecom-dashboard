@@ -812,6 +812,66 @@ input[type=number]{-moz-appearance:textfield;}
     </div>
   </div>
 
+  <!-- Team Reminder Section -->
+  <div class="card" style="margin-top:20px;border:1px solid #2E7D32;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="card-title" style="margin:0;">💚 ข้อความเตือนทีม (Daily Reminder)</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
+        <input id="lineReminderTime" type="time" class="cell" value="17:00" onchange="DB.lineReminderSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+      </div>
+    </div>
+    <div style="color:var(--muted);font-size:11px;margin-bottom:10px;">
+      ข้อความนี้จะส่งทุกวัน จ-ศ ตามเวลาที่ตั้ง เพื่อเตือนทีมสรุปงานลง Dashboard
+    </div>
+
+    <!-- Reminder Preview -->
+    <div style="max-width:360px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+      <!-- Header gradient -->
+      <div style="background:linear-gradient(135deg,#1B5E20,#388E3C);padding:16px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🏢</span>
+        <div>
+          <div style="color:#fff;font-size:18px;font-weight:700;" id="reminderTitle">JLC ALL</div>
+          <div style="color:#B8E6C8;font-size:11px;">Daily Reminder</div>
+        </div>
+      </div>
+      <!-- Body -->
+      <div style="background:#fff;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:#1B5E20;margin-bottom:8px;">📋 สรุปงานก่อนกลับบ้าน</div>
+        <div style="height:1px;background:#E8F5E9;margin:10px 0;"></div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:12px 0;">
+          <div style="width:32px;height:32px;background:#E8F5E9;border-radius:50%;display:flex;align-items:center;justify-content:center;">✅</div>
+          <div>
+            <div id="reminderItem1Title" style="font-size:13px;font-weight:600;color:#333;" contenteditable="true" oninput="saveReminderTemplate()">บันทึกสรุปงานวันนี้</div>
+            <div id="reminderItem1Desc" style="font-size:11px;color:#888;margin-top:2px;" contenteditable="true" oninput="saveReminderTemplate()">กรอกข้อมูล task งานต่างๆ ลง Dashboard ให้ครบ</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:12px 0;">
+          <div style="width:32px;height:32px;background:#FFF3E0;border-radius:50%;display:flex;align-items:center;justify-content:center;">📌</div>
+          <div>
+            <div id="reminderItem2Title" style="font-size:13px;font-weight:600;color:#333;" contenteditable="true" oninput="saveReminderTemplate()">เตรียมงานพรุ่งนี้</div>
+            <div id="reminderItem2Desc" style="font-size:11px;color:#888;margin-top:2px;" contenteditable="true" oninput="saveReminderTemplate()">วางแผนและเตรียมสิ่งที่ต้องทำ ให้พร้อมก่อนกลับบ้าน</div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:#E8F5E9;margin:10px 0;"></div>
+
+        <div style="background:linear-gradient(90deg,#2E7D32,#43A047);border-radius:10px;padding:12px;text-align:center;">
+          <span id="reminderThankMsg" style="color:#fff;font-size:13px;font-weight:600;" contenteditable="true" oninput="saveReminderTemplate()">ขอบคุณทุกคนที่ตั้งใจทำงานในวันนี้ 💚</span>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div style="background:#F1F8E9;padding:12px;">
+        <div style="background:#1B5E20;color:#fff;text-align:center;padding:8px;border-radius:8px;font-size:13px;font-weight:600;">📊 เปิด Dashboard</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;justify-content:center;">
+      <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);" onclick="copyFlexJSON('reminder')">📋 Copy Flex JSON</button>
+    </div>
+  </div>
+
   <!-- Custom Messages Section -->
   <div style="margin-top:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1420,6 +1480,7 @@ async function initApp(){
       showLoadingOverlay(false);
       setSaveStatus('ok','✅ โหลดข้อมูลจาก API แล้ว');
       await loadLineTemplates();
+      loadReminderTemplate(); // โหลด template เตือนทีม
       loadUserManagement(); // Load admin user panel if admin
       applyTabVisibility(); // Hide tabs based on user permission
       applyEditPermission(); // Disable editing on restricted tabs
@@ -2721,10 +2782,82 @@ function renderCarouselPreview(carousel, containerId){
 }
 
 function copyFlexJSON(type){
-  const json = type==='summary' ? FLEX_SUMMARY_JSON : FLEX_BRAND_JSON;
+  let json, alt;
+  if(type==='summary'){ json=FLEX_SUMMARY_JSON; alt='JLC ALL ONLINE Daily Report'; }
+  else if(type==='brand'){ json=FLEX_BRAND_JSON; alt='Brand Report'; }
+  else if(type==='reminder'){ json=buildReminderFlex(); alt='JLC ALL — สรุปงานก่อนกลับบ้าน'; }
   if(!json) return showToast('❌ ไม่มีข้อมูล');
-  const msg = {type:'flex',altText:type==='summary'?'JLC ALL ONLINE Daily Report':'Brand Report',contents:json};
+  const msg = {type:'flex',altText:alt,contents:json};
   navigator.clipboard.writeText(JSON.stringify(msg,null,2)).then(()=>showToast('📋 คัดลอก Flex JSON แล้ว!')).catch(()=>{});
+}
+
+// === Team Reminder Template ===
+function buildReminderFlex(){
+  const t1 = document.getElementById('reminderItem1Title')?.textContent || 'บันทึกสรุปงานวันนี้';
+  const d1 = document.getElementById('reminderItem1Desc')?.textContent || '';
+  const t2 = document.getElementById('reminderItem2Title')?.textContent || 'เตรียมงานพรุ่งนี้';
+  const d2 = document.getElementById('reminderItem2Desc')?.textContent || '';
+  const thank = document.getElementById('reminderThankMsg')?.textContent || 'ขอบคุณทุกคนที่ตั้งใจทำงานในวันนี้ 💚';
+  const title = document.getElementById('reminderTitle')?.textContent || 'JLC ALL';
+  return {
+    type:'bubble',size:'mega',
+    header:{type:'box',layout:'vertical',contents:[{type:'box',layout:'horizontal',contents:[
+      {type:'text',text:'🏢',size:'xxl',flex:0},
+      {type:'box',layout:'vertical',contents:[
+        {type:'text',text:title,color:'#FFFFFF',size:'xl',weight:'bold'},
+        {type:'text',text:'Daily Reminder',color:'#B8E6C8',size:'xs'}
+      ],paddingStart:'md'}
+    ],alignItems:'center'}],background:{type:'linearGradient',angle:'135deg',startColor:'#1B5E20',endColor:'#388E3C'},paddingAll:'20px'},
+    body:{type:'box',layout:'vertical',contents:[
+      {type:'text',text:'📋 สรุปงานก่อนกลับบ้าน',weight:'bold',size:'md',color:'#1B5E20'},
+      {type:'separator',margin:'lg',color:'#E8F5E9'},
+      {type:'box',layout:'horizontal',contents:[
+        {type:'box',layout:'vertical',contents:[{type:'text',text:'✅',size:'md',align:'center'}],width:'32px',height:'32px',backgroundColor:'#E8F5E9',cornerRadius:'16px',justifyContent:'center',alignItems:'center',flex:0},
+        {type:'box',layout:'vertical',contents:[
+          {type:'text',text:t1,weight:'bold',size:'sm',color:'#333333'},
+          {type:'text',text:d1,size:'xs',color:'#888888',wrap:true}
+        ],paddingStart:'md'}
+      ],alignItems:'center',margin:'xl'},
+      {type:'box',layout:'horizontal',contents:[
+        {type:'box',layout:'vertical',contents:[{type:'text',text:'📌',size:'md',align:'center'}],width:'32px',height:'32px',backgroundColor:'#FFF3E0',cornerRadius:'16px',justifyContent:'center',alignItems:'center',flex:0},
+        {type:'box',layout:'vertical',contents:[
+          {type:'text',text:t2,weight:'bold',size:'sm',color:'#333333'},
+          {type:'text',text:d2,size:'xs',color:'#888888',wrap:true}
+        ],paddingStart:'md'}
+      ],alignItems:'center',margin:'xl'},
+      {type:'separator',margin:'xl',color:'#E8F5E9'},
+      {type:'box',layout:'vertical',contents:[
+        {type:'text',text:thank,size:'sm',color:'#FFFFFF',align:'center',weight:'bold',wrap:true}
+      ],background:{type:'linearGradient',angle:'90deg',startColor:'#2E7D32',endColor:'#43A047'},cornerRadius:'lg',paddingAll:'lg',margin:'xl'}
+    ],paddingAll:'20px',backgroundColor:'#FFFFFF'},
+    footer:{type:'box',layout:'vertical',contents:[{
+      type:'button',action:{type:'uri',label:'📊 เปิด Dashboard',uri:'https://ecom-dashboard.wejlc.com'},
+      style:'primary',color:'#1B5E20',height:'sm'
+    }],paddingAll:'16px',backgroundColor:'#F1F8E9'},
+    styles:{header:{separator:false},footer:{separator:false}}
+  };
+}
+
+function saveReminderTemplate(){
+  DB.reminderItem1Title = document.getElementById('reminderItem1Title')?.textContent || '';
+  DB.reminderItem1Desc = document.getElementById('reminderItem1Desc')?.textContent || '';
+  DB.reminderItem2Title = document.getElementById('reminderItem2Title')?.textContent || '';
+  DB.reminderItem2Desc = document.getElementById('reminderItem2Desc')?.textContent || '';
+  DB.reminderThankMsg = document.getElementById('reminderThankMsg')?.textContent || '';
+  DB.reminderTitle = document.getElementById('reminderTitle')?.textContent || '';
+  // debounced save
+  clearTimeout(window._reminderSaveTimer);
+  window._reminderSaveTimer = setTimeout(()=>saveDB(), 1000);
+}
+
+function loadReminderTemplate(){
+  if(DB.reminderItem1Title) document.getElementById('reminderItem1Title').textContent = DB.reminderItem1Title;
+  if(DB.reminderItem1Desc) document.getElementById('reminderItem1Desc').textContent = DB.reminderItem1Desc;
+  if(DB.reminderItem2Title) document.getElementById('reminderItem2Title').textContent = DB.reminderItem2Title;
+  if(DB.reminderItem2Desc) document.getElementById('reminderItem2Desc').textContent = DB.reminderItem2Desc;
+  if(DB.reminderThankMsg) document.getElementById('reminderThankMsg').textContent = DB.reminderThankMsg;
+  if(DB.reminderTitle) document.getElementById('reminderTitle').textContent = DB.reminderTitle;
+  if(document.getElementById('lineReminderTime')) document.getElementById('lineReminderTime').value = DB.lineReminderSendTime || '17:00';
 }
 
 const DEFAULT_LINE_SUM_TPL = `📊 JLC ALL ONLINE Daily Report — {date}
