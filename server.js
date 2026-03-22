@@ -11,10 +11,21 @@ const jwt = require('jsonwebtoken');
 
 const app  = express();
 const PORT = process.env.PORT || 8088;
+const SERVER_VERSION = '2026-03-22-v2'; // ใช้เช็คว่า server รัน code ใหม่จริง
 
 // --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// ป้องกัน browser cache index.html — ให้โหลด code ใหม่ทุกครั้ง
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, '.')));   // serve index.html
 
 // --- PostgreSQL Pool ---
@@ -183,6 +194,7 @@ app.post('/api/auth/google', async (req, res) => {
 
     // ถ้า login ผ่าน Google ครั้งแรก (ยังไม่มี google_id) และไม่ใช่ admin → ต้องรออนุมัติ
     if (isFirstGoogleLogin && !emp.is_admin && !AUTO_APPROVE_USERS) {
+      console.log('[AUTH] Setting first-login user to pending:', emp.id, emp.email);
       await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['pending', emp.id]);
       emp.status = 'pending';
     }
@@ -199,6 +211,7 @@ app.post('/api/auth/google', async (req, res) => {
     if (emp.status !== 'approved') {
       // status เป็น pending, null, undefined, หรืออื่นๆ → ต้องรออนุมัติ
       if (AUTO_APPROVE_USERS) {
+        console.log('[AUTH] AUTO_APPROVE re-approving user:', emp.id, emp.email);
         await pool.query('UPDATE employees SET status = $1 WHERE id = $2', ['approved', emp.id]);
         return issueJwtForEmployee(res, emp.id);
       }
@@ -261,20 +274,32 @@ app.post('/api/admin/approve-user', requireAuth, async function(req, res) {
       return res.status(400).json({ error: 'userId and action required' });
     }
     var newStatus = action === 'approve' ? 'approved' : 'rejected';
-    if (action === 'approve') {
-      // ถ้ายังไม่เคยกำหนด visible_tabs → ตั้งค่าเริ่มต้นให้เห็นแค่ Current Task
-      var current = await pool.query('SELECT visible_tabs, editable_tabs FROM employees WHERE id = $1', [userId]);
-      if (current.rows.length > 0) {
-        var vt = current.rows[0].visible_tabs;
-        var et = current.rows[0].editable_tabs;
-        var setVt = (!vt || vt === '') ? DEFAULT_VISIBLE_TABS : vt;
-        var setEt = (!et || et === '') ? DEFAULT_EDITABLE_TABS : et;
-        await pool.query('UPDATE employees SET status = $1, visible_tabs = $2, editable_tabs = $3 WHERE id = $4', [newStatus, setVt, setEt, userId]);
+    console.log('[ADMIN] approve-user:', userId, 'action:', action, 'newStatus:', newStatus);
+    // ปลด trigger ชั่วคราวเพื่อให้ admin approve ได้
+    var client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL myapp.admin_approve = 'true'");
+      if (action === 'approve') {
+        var current = await client.query('SELECT visible_tabs, editable_tabs FROM employees WHERE id = $1', [userId]);
+        if (current.rows.length > 0) {
+          var vt = current.rows[0].visible_tabs;
+          var et = current.rows[0].editable_tabs;
+          var setVt = (!vt || vt === '') ? DEFAULT_VISIBLE_TABS : vt;
+          var setEt = (!et || et === '') ? DEFAULT_EDITABLE_TABS : et;
+          await client.query('UPDATE employees SET status = $1, visible_tabs = $2, editable_tabs = $3 WHERE id = $4', [newStatus, setVt, setEt, userId]);
+        } else {
+          await client.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+        }
       } else {
-        await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+        await client.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
       }
-    } else {
-      await pool.query('UPDATE employees SET status = $1 WHERE id = $2', [newStatus, userId]);
+      await client.query('COMMIT');
+    } catch(e2) {
+      await client.query('ROLLBACK');
+      throw e2;
+    } finally {
+      client.release();
     }
     res.json({ success: true, userId: userId, status: newStatus });
   } catch (err) {
@@ -489,6 +514,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
 
     // --- Employees: อัพเดตเฉพาะ name, brands, note, is_admin ของคนที่มีอยู่แล้ว ---
     // ไม่ INSERT/DELETE พนักงาน — ใช้ปุ่ม "บันทึกพนักงาน" หรือ Google login แทน
+    console.log('[SAVE] PUT /api/data employees section — UPDATE only, NO INSERT/DELETE (v2)');
     if (Array.isArray(db.employees)) {
       var existingEmps = await client.query('SELECT id, email FROM employees');
       var empMap = {};
@@ -1321,7 +1347,7 @@ app.post('/api/line/send', requireAuth, async (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected' });
+    res.json({ status: 'ok', db: 'connected', version: SERVER_VERSION });
   } catch (err) {
     res.status(500).json({ status: 'error', db: err.message });
   }
@@ -1348,5 +1374,5 @@ process.on('unhandledRejection', (err) => {
 // Start
 // ============================================================
 app.listen(PORT, function() {
-  console.log('ECOM Dashboard API running on port ' + PORT);
+  console.log('ECOM Dashboard API running on port ' + PORT + ' | version: ' + SERVER_VERSION + ' | AUTO_APPROVE=' + AUTO_APPROVE_USERS);
 });
