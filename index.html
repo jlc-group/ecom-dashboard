@@ -3804,10 +3804,12 @@ function refreshAPMSummary(){
 function addAPMTask(){
   if(!DB.apmTasks) DB.apmTasks=[];
   const monthVal = document.getElementById('selMonth').value;
+  // ถ้าไม่ใช่ admin ให้ใส่ชื่อตัวเองอัตโนมัติ (ป้องกัน privacy filter กรองงานใหม่ออก)
+  const myName = isAdminUser() ? '' : (getMyEmployeeName()||'');
   DB.apmTasks.push({
     id: Date.now(),
     month: monthVal!=='all' ? monthVal : '',
-    employee:'', brand:'', task:'',
+    employee: myName, brand:'', task:'',
     detail:'',
     status:'not_started', startDate:'', due:'', note:''
   });
