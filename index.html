@@ -531,10 +531,10 @@ input[type=number]{-moz-appearance:textfield;}
       <table class="sum-table">
         <thead><tr><th>รายการ</th><th>ค่า</th><th>หมายเหตุ</th></tr></thead>
         <tbody>
-          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;saveDB();"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
-          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;saveDB();"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
-          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;" onchange="DB.lineSendSummary=this.value;saveDB();"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
-          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;" onchange="DB.lineSendBrand=this.value;saveDB();"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
+          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
+          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;" onchange="DB.lineSendSummary=this.value;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;" onchange="DB.lineSendBrand=this.value;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
           <tr><td>API ตารางส่ง</td><td><code style="font-size:11px;color:var(--accent);">/api/line/schedule</code></td><td style="font-size:11px;color:var(--muted)">ให้ Scheduler ภายนอกเรียกดึงข้อความ+เวลาส่ง</td></tr>
         </tbody>
       </table>
@@ -1484,7 +1484,8 @@ async function initApp(){
       loadUserManagement(); // Load admin user panel if admin
       applyTabVisibility(); // Hide tabs based on user permission
       applyEditPermission(); // Disable editing on restricted tabs
-      setInterval(autoSaveAPI, 120000); // autosave ทุก 2 นาที
+      // Save เมื่อออกจากหน้า (beforeunload) — แทน auto-save ทุก 2 นาที
+      window.addEventListener('beforeunload', saveOnLeave);
       window.scrollTo(0, 0); // กลับไปด้านบนสุด
     } catch(e) {
       console.error('initApp API error:', e);
@@ -1587,6 +1588,36 @@ async function autoSaveAPI(){
     console.warn('autoSaveAPI failed:', e);
     setSaveStatus('err','⚠️ Auto-save ล้มเหลว');
   }
+}
+
+// Save เมื่อออกจากหน้า (beforeunload) — ใช้ sendBeacon เพื่อให้ส่งได้แม้หน้าจะปิด
+function saveOnLeave(){
+  if(!IS_API || !AUTH_TOKEN) return;
+  // Sync sheet data from DOM
+  ['tt','sp','lz'].forEach(plat=>{
+    const tbody=document.getElementById('tbody-'+plat);
+    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
+  });
+  // Sync employee data from DOM
+  const empTbody = document.getElementById('empConfigTable');
+  if(empTbody && empTbody.children.length > 0){
+    const rows = empTbody.querySelectorAll('tr');
+    const emps = [];
+    rows.forEach((tr,idx)=>{
+      const name = tr.querySelector('[data-field="name"]')?.value?.trim();
+      const email = tr.querySelector('[data-field="email"]')?.value?.trim();
+      const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
+      const note = tr.querySelector('[data-field="note"]')?.value?.trim();
+      const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
+      const oldEmp = (DB.employees||[])[idx];
+      const canView = oldEmp?.canView || [];
+      if(name) emps.push({name, email, brands, note, isAdmin, canView});
+    });
+    if(emps.length > 0) DB.employees = emps;
+  }
+  // ใช้ sendBeacon — ส่งได้แม้หน้าจะปิด (ไม่ถูก cancel เหมือน fetch)
+  const blob = new Blob([JSON.stringify(DB)], {type:'application/json'});
+  navigator.sendBeacon(API_BASE + '/api/data/beacon?token=' + AUTH_TOKEN, blob);
 }
 
 function autoSaveGAS(){
@@ -3538,11 +3569,11 @@ function renderEmpConfig(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
-      <td><input class="cell left" value="${emp.name||''}" data-ei="${i}" data-field="name" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
-      <td><input class="cell left" value="${emp.email||''}" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
-      <td><input class="cell left" value="${emp.brands||''}" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
-      <td><input class="cell left" value="${emp.note||''}" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
-      <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" ${emp.isAdmin?'checked':''} onchange="debouncedEmpSave()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+      <td><input class="cell left" value="${emp.name||''}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+      <td><input class="cell left" value="${emp.email||''}" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+      <td><input class="cell left" value="${emp.brands||''}" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+      <td><input class="cell left" value="${emp.note||''}" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+      <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" ${emp.isAdmin?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
       <td style="text-align:center;">
         <button class="btn btn-ghost btn-sm" onclick="openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
       </td>
@@ -3557,11 +3588,11 @@ function addEmployeeRow(){
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
-    <td><input class="cell left" value="พนักงาน ${i+1}" data-ei="${i}" data-field="name" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
-    <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" onchange="debouncedEmpSave()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+    <td><input class="cell left" value="พนักงาน ${i+1}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+    <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
     <td style="text-align:center;">
       <button class="btn btn-ghost btn-sm" onclick="saveEmployeeConfig();openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
     </td>

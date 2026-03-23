@@ -486,6 +486,85 @@ app.get('/api/data', requireAuth, async (req, res) => {
 });
 
 // ============================================================
+// POST /api/data/beacon — Save via sendBeacon (beforeunload)
+// sendBeacon ส่ง token ผ่าน query param เพราะตั้ง header ไม่ได้
+// ============================================================
+app.post('/api/data/beacon', async (req, res) => {
+  try {
+    var token = req.query.token;
+    if (!token) return res.status(401).json({ error: 'NO_TOKEN' });
+    var decoded = jwt.verify(token, JWT_SECRET);
+    // Reuse the same save logic — forward to PUT handler
+    req.user = decoded;
+    req.body = req.body || {};
+    // Use the same save transaction
+    var client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      var db = req.body;
+
+      // Platform data first (FK)
+      for (var plat of ['tt', 'sp', 'lz']) {
+        var table = TABLE_MAP[plat];
+        await client.query('DELETE FROM ' + table);
+      }
+      // Brands
+      if (Array.isArray(db.brands)) {
+        await client.query('DELETE FROM brands');
+        for (var bi = 0; bi < db.brands.length; bi++) {
+          var bCode = db.brands[bi];
+          var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
+          var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
+          await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [bCode, bName, bTarget]);
+        }
+      }
+      // Config values
+      var configKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
+      for (var [jsKey, dbKey] of Object.entries(configKeys)) {
+        if (db[jsKey] !== undefined) {
+          await client.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dbKey, db[jsKey] || '']);
+        }
+      }
+      if (db.lineTemplates) await client.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
+      if (db.lineCustomMsgs) await client.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
+      // Employees
+      if (Array.isArray(db.employees)) {
+        var existingEmps = await client.query('SELECT id, email FROM employees');
+        var empMap = {};
+        existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
+        for (var emp of db.employees) {
+          var empKey = (emp.email||'').toLowerCase();
+          var exEmp = empMap[empKey];
+          if(exEmp) await client.query('UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5', [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, exEmp.id]);
+        }
+      }
+      // Platform data re-insert
+      for (var plat of ['tt', 'sp', 'lz']) {
+        if (!Array.isArray(db[plat])) continue;
+        var table = TABLE_MAP[plat];
+        var cols = PLAT_COLS[plat];
+        var ph = makePH(cols.length);
+        for (var row of db[plat]) {
+          var snake = rowToSnake(row);
+          var vals = cols.map(function(c){ return cleanVal(c, snake[c]); });
+          await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
+        }
+      }
+      await client.query('COMMIT');
+    } catch(e2) {
+      await client.query('ROLLBACK');
+      console.error('beacon save error:', e2.message);
+    } finally {
+      client.release();
+    }
+    res.json({ ok: true });
+  } catch(e) {
+    console.error('beacon auth error:', e.message);
+    res.status(401).json({ error: 'INVALID_TOKEN' });
+  }
+});
+
+// ============================================================
 // PUT /api/data — Save entire DB (mimics the old saveDB)
 // ============================================================
 app.put('/api/data', requireAuth, async (req, res) => {
