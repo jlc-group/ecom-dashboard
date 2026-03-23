@@ -502,17 +502,12 @@ app.post('/api/data/beacon', async (req, res) => {
     req.body = req.body || {};
     var db = req.body;
 
-    // === 1) Config values — save OUTSIDE transaction (safe, idempotent upserts) ===
+    // === 1) Config values — LINE config is NOW saved via POST /api/config/save (saveConfig) ===
+    // Do NOT save LINE config keys here — beacon sends stale DB values that overwrite real saved values
     try {
-      var configKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
-      for (var [jsKey, dbKey] of Object.entries(configKeys)) {
-        if (db[jsKey] !== undefined) {
-          await pool.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dbKey, db[jsKey] || '']);
-        }
-      }
       if (db.lineTemplates) await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
       if (db.lineCustomMsgs) await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
-      console.log('[BEACON] config saved OK');
+      console.log('[BEACON] config saved OK (skipped LINE config keys)');
     } catch(eCfg) {
       console.error('[BEACON] config save error:', eCfg.message);
     }
@@ -645,12 +640,9 @@ app.post('/api/config/save', requireAuth, async (req, res) => {
 app.put('/api/data', requireAuth, async (req, res) => {
   const db = req.body;
 
-  // === 1) Config values — save OUTSIDE transaction (safe, won't be rolled back) ===
+  // === 1) Config values — LINE config keys are NOW saved via POST /api/config/save (saveConfig) ===
+  // Do NOT save LINE config keys here — PUT sends stale DB values that overwrite real saved values
   try {
-    var cfgKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
-    for (var [jk, dk] of Object.entries(cfgKeys)) {
-      if (db[jk] !== undefined) await pool.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dk, db[jk] || '']);
-    }
     if (db.lineTemplates !== undefined && db.lineTemplates !== null) await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
     if (db.lineCustomMsgs !== undefined && db.lineCustomMsgs !== null) await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
     if (Array.isArray(db.forecastPlatforms)) await pool.query("INSERT INTO config (key, value) VALUES ('forecast_platforms', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.forecastPlatforms)]);
