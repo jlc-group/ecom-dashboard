@@ -4261,7 +4261,7 @@ function renderAudit(){
   }
   if(bFilter){
     const cv = bFilter.value;
-    const brands = [...new Set(log.map(e=>e.brand).filter(Boolean))];
+    const brands = [...new Set(log.map(e=>e.brand).filter(b => b && b !== 'all'))];
     bFilter.innerHTML = '<option value="all">🏷 ทุกแบรนด์</option>' +
       brands.map(b=>`<option value="${b}"${cv===b?' selected':''}>${b}</option>`).join('');
   }
