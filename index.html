@@ -1623,13 +1623,9 @@ function saveOnLeave(){
     if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
   });
   // Sync LINE config from DOM
-  const _lt=document.getElementById('lineToken'); if(_lt) DB.lineToken=_lt.value||'';
-  const _lg=document.getElementById('lineGroup'); if(_lg) DB.lineGroup=_lg.value||'';
-  const _st=document.getElementById('lineSumTime'); if(_st) DB.lineSumSendTime=_st.value||'';
-  const _bt=document.getElementById('lineBrandTime'); if(_bt) DB.lineBrandSendTime=_bt.value||'';
-  const _rt=document.getElementById('lineReminderTime'); if(_rt) DB.lineReminderSendTime=_rt.value||'17:00';
-  const _ss=document.getElementById('lineSendSummary'); if(_ss) DB.lineSendSummary=_ss.value||'YES';
-  const _sb=document.getElementById('lineSendBrand'); if(_sb) DB.lineSendBrand=_sb.value||'YES';
+  // NOTE: ไม่ sync LINE config จาก DOM ที่นี่ เพราะถ้า LINE tab ยังไม่ถูกเปิด
+  // input จะมีค่า default (09:00, 17:00) ซึ่งจะทับค่าจริงใน DB
+  // LINE config ใช้ saveConfig() ผ่าน onchange แทน
   // Sync employee data from DOM
   const empTbody = document.getElementById('empConfigTable');
   if(empTbody && empTbody.children.length > 0){
