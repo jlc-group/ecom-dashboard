@@ -1875,4 +1875,30 @@ process.on('unhandledRejection', (err) => {
 
 app.listen(PORT, function() {
   console.log('ECOM Dashboard API running on port ' + PORT + ' | version: ' + SERVER_VERSION + ' | AUTO_APPROVE=' + AUTO_APPROVE_USERS);
+
+  // === AUTO LINE BROADCAST — เช็คทุก 1 นาที ===
+  setInterval(function(){
+    var http = require('http');
+    var postReq = http.request({
+      hostname: 'localhost', port: PORT, path: '/api/line/send-report', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, function(resp){
+      var body = '';
+      resp.on('data', function(c){ body += c; });
+      resp.on('end', function(){
+        try {
+          var r = JSON.parse(body);
+          if(r.results && r.results.length > 0) console.log('[AUTO-LINE] sent:', r.results.map(function(x){ return x.id+'→'+x.status; }).join(', '));
+          if(r.skipped && r.skipped.length > 0) {
+            var notYet = r.skipped.filter(function(x){ return x.reason==='not_yet'; });
+            if(notYet.length > 0) console.log('[AUTO-LINE] waiting:', notYet.map(function(x){ return x.id+'@'+x.sendTime; }).join(', '));
+          }
+        } catch(e){}
+      });
+    });
+    postReq.on('error', function(e){ /* server not ready yet */ });
+    postReq.write('{}');
+    postReq.end();
+  }, 60000); // ทุก 60 วินาที
+  console.log('[AUTO-LINE] Timer started — checking every 60 seconds');
 });
