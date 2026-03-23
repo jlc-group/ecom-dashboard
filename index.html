@@ -531,10 +531,10 @@ input[type=number]{-moz-appearance:textfield;}
       <table class="sum-table">
         <thead><tr><th>รายการ</th><th>ค่า</th><th>หมายเหตุ</th></tr></thead>
         <tbody>
-          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
-          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
-          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
-          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;saveDB();"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
+          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;saveDB();"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
+          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;" onchange="DB.lineSendSummary=this.value;saveDB();"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;" onchange="DB.lineSendBrand=this.value;saveDB();"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
           <tr><td>API ตารางส่ง</td><td><code style="font-size:11px;color:var(--accent);">/api/line/schedule</code></td><td style="font-size:11px;color:var(--muted)">ให้ Scheduler ภายนอกเรียกดึงข้อความ+เวลาส่ง</td></tr>
         </tbody>
       </table>
@@ -2179,6 +2179,8 @@ function renderConfig(){
   if(document.getElementById('lineToken')) document.getElementById('lineToken').value = DB.lineToken||'';
   if(document.getElementById('lineGroup')) document.getElementById('lineGroup').value = DB.lineGroup||'';
   if(document.getElementById('lineSendTime')) document.getElementById('lineSendTime').value = DB.lineSendTime||'09:00';
+  if(document.getElementById('lineSendSummary')) document.getElementById('lineSendSummary').value = DB.lineSendSummary||'YES';
+  if(document.getElementById('lineSendBrand')) document.getElementById('lineSendBrand').value = DB.lineSendBrand||'YES';
   // Render employee config
   renderEmpConfig();
   // Render forecast platforms config
