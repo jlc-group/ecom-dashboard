@@ -570,10 +570,21 @@ app.post('/api/data/beacon', async (req, res) => {
   }
 });
 
+// DEBUG: ดูค่า config ใน DB
+app.get('/api/debug/config', async (req, res) => {
+  try {
+    var { rows } = await pool.query("SELECT key, value FROM config ORDER BY key");
+    var obj = {};
+    rows.forEach(r => { obj[r.key] = r.value; });
+    res.json(obj);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ============================================================
 // PATCH /api/config — Save config values ONLY (lightweight, no platform data)
 // ============================================================
 app.patch('/api/config', requireAuth, async (req, res) => {
+  console.log('[PATCH /api/config] body:', JSON.stringify(req.body));
   try {
     var data = req.body;
     var configKeys = {
