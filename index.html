@@ -4344,11 +4344,12 @@ function genMonthRows(plat){
   const existing = {};
   const savedRows = DB[plat] || [];
   savedRows.forEach(r => {
-    if(!r.date) return;
+    if(!r.date && !r.Date) return;
+    const dStr = String(r.date || r.Date).substring(0,10); // ตัด T00:00:00.000Z ทิ้ง
     // ถ้าเลือก brand เฉพาะ ให้โหลดเฉพาะ brand นั้น
     if(currentBrand !== 'all' && r.brand && r.brand !== currentBrand) return;
-    if(!existing[r.date]) existing[r.date] = [];
-    existing[r.date].push(r);
+    if(!existing[dStr]) existing[dStr] = [];
+    existing[dStr].push(r);
   });
 
   const tbody = document.getElementById(`tbody-${plat}`);
