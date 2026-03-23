@@ -1109,15 +1109,14 @@ async function apiFetch(url, options){
   options = options || {};
   options.headers = authHeaders(options.headers);
   const res = await fetch(url, options);
-  if(res.status === 401 && AUTH_TOKEN){
+  if(res.status === 401){
     handleLogout();
-    showToast('⚠️ Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    showToast('⚠️ ต้องเข้าสู่ระบบใหม่');
     throw new Error('Unauthorized');
   }
-  if(res.status === 403 && AUTH_TOKEN){
-    // บัญชีถูกระงับหรือยังไม่อนุมัติ
+  if(res.status === 403){
     handleLogout();
-    showToast('⚠️ บัญชีของคุณถูกระงับ กรุณาติดต่อ Admin');
+    showToast('⚠️ สิทธิ์ถูกระงับ กรุณาติดต่อ Admin');
     throw new Error('Not approved');
   }
   return res;
@@ -1828,7 +1827,14 @@ function updateBrandDropdowns(){
     o.value=b; o.text=b;
     sel.appendChild(o);
   });
-  if(cur) sel.value=cur;
+  
+  if(cur && cur !== 'all') {
+    sel.value = cur;
+  } else if (BRANDS && BRANDS.length > 0) {
+    // ให้ selBrand เลือกแบรนด์แรกอัตโนมัติ เพื่อให้เริ่มกรอกข้อมูลได้เลย (ไม่ค้างที่ "ทุกแบรนด์")
+    sel.value = BRANDS[0];
+  }
+
   // อัพเดต badge และ user dropdown
   if(document.getElementById('tt-brand-badge')) updateBrandLabels();
   updateUserDropdown();
@@ -4347,7 +4353,7 @@ function genAllSheetRows(){
 function onBrandChange(){
   // บันทึก rows ปัจจุบันก่อนเปลี่ยน brand (merge ไม่ทับ brand อื่น)
   ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
-  saveDB();
+  saveDraft();
   // regenerate แถวใหม่ตาม brand ที่เลือก
   genAllSheetRows();
   refreshAll();
@@ -4374,7 +4380,7 @@ function updateBrandLabels(){
 function onMonthChange(){
   // sync current sheet data to DB before switching (merge ไม่ทับ brand/month อื่น)
   ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
-  saveDB();
+  saveDraft();
   genAllSheetRows();
   refreshAll();
 }
