@@ -2273,13 +2273,25 @@ async function saveBrandConfig(){
   DB.brands = newBrands;
   DB.brandTargets = targets;
   DB.brandNames = names;
-  DB.lineToken = document.getElementById('lineToken')?.value||'';
-  DB.lineGroup = document.getElementById('lineGroup')?.value||'';
-  DB.lineSendTime = document.getElementById('lineSendTime')?.value||'09:00';
-  DB.lineSendSummary = document.getElementById('lineSendSummary')?.value||'YES';
-  DB.lineSendBrand = document.getElementById('lineSendBrand')?.value||'YES';
   BRANDS.length=0; newBrands.forEach(b=>BRANDS.push(b));
-  await saveDB(); updateBrandDropdowns();
+  // ใช้ PUT /api/brands โดยตรง — ไม่ผ่าน saveDB() เพื่อป้องกัน race condition
+  if(IS_API){
+    try {
+      setSaveStatus('saving','⏳ กำลังบันทึก...');
+      const resp = await apiFetch(API_BASE + '/api/brands', {
+        method: 'PUT',
+        body: JSON.stringify({brands: newBrands, brandTargets: targets, brandNames: names})
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      setSaveStatus('ok','✅ บันทึกแล้ว');
+    } catch(e){
+      console.error('saveBrandConfig error:', e);
+      setSaveStatus('err','❌ บันทึกไม่ได้');
+    }
+  } else {
+    await saveDB();
+  }
+  updateBrandDropdowns();
   showToast('✅ บันทึก Config แล้ว!');
 }
 
@@ -3658,7 +3670,23 @@ async function saveEmployeeConfig(){
     if(name) newEmps.push({name, email, brands, note, isAdmin, canView});
   });
   DB.employees = newEmps;
-  await saveDB();
+  // ใช้ PUT /api/employees โดยตรง — รองรับการลบพนักงานด้วย (saveDB ลบไม่ได้)
+  if(IS_API){
+    try {
+      setSaveStatus('saving','⏳ กำลังบันทึก...');
+      const resp = await apiFetch(API_BASE + '/api/employees', {
+        method: 'PUT',
+        body: JSON.stringify({employees: newEmps})
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      setSaveStatus('ok','✅ บันทึกแล้ว');
+    } catch(e){
+      console.error('saveEmployeeConfig error:', e);
+      setSaveStatus('err','❌ บันทึกไม่ได้');
+    }
+  } else {
+    await saveDB();
+  }
   showToast('✅ บันทึกข้อมูลพนักงานแล้ว!');
 }
 
@@ -4572,17 +4600,17 @@ function applyEditPermission(){
   // For each tab content section, if not in allowed list, disable all inputs
   TAB_INDEX_TO_KEY.forEach(function(key, idx){
     if(allowed.includes(key)) return; // user can edit this tab
-    // Find the tab content panel
-    var panels = document.querySelectorAll('.tab-content');
-    if(panels[idx]){
-      var inputs = panels[idx].querySelectorAll('input, select, textarea');
+    // Find the tab content panel by id (page-{key})
+    var panel = document.getElementById('page-' + key);
+    if(panel){
+      var inputs = panel.querySelectorAll('input, select, textarea');
       inputs.forEach(function(inp){
         inp.disabled = true;
         inp.style.opacity = '0.5';
         inp.style.cursor = 'not-allowed';
       });
-      // Hide save buttons in read-only tabs
-      var btns = panels[idx].querySelectorAll('button.btn-success, button[onclick*="save"]');
+      // Disable save buttons in read-only tabs
+      var btns = panel.querySelectorAll('button.btn-success, button[onclick*="save"], button.btn-primary');
       btns.forEach(function(btn){
         btn.disabled = true;
         btn.style.opacity = '0.4';

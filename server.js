@@ -69,7 +69,7 @@ function rowToSnake(obj) {
 const TEXT_COLS = new Set(['date', 'brand', 'month', 'employee', 'task', 'detail', 'status',
   'start_date', 'due', 'note', 'name', 'email', 'brands', 'action', 'platform',
   'data_date', 'field', 'old_val', 'new_val', 'user', 'user_name', 'ts', 'due_date',
-  'google_id', 'picture', 'visible_tabs', 'editable_tabs']);
+  'google_id', 'picture', 'visible_tabs', 'editable_tabs', 'can_view']);
 
 // Convert empty strings to null for numeric columns
 function cleanVal(col, val) {
@@ -410,7 +410,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog, forecast, configRows] = await Promise.all([
       pool.query('SELECT code, name, target_nm FROM brands ORDER BY sort_order, name'),
-      pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
+      pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs, can_view FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
@@ -456,7 +456,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
       brands:       brands.rows.map(r => r.code),
       brandTargets: brandTargets,
       brandNames:   brandNames,
-      employees:    employees.rows.map(rowToCamel),
+      employees:    employees.rows.map(function(r){ var e = rowToCamel(r); e.canView = e.canView ? e.canView.split(',').filter(Boolean) : []; return e; }),
       tt:           tt.rows.map(rowToCamel),
       sp:           sp.rows.map(rowToCamel),
       lz:           lz.rows.map(rowToCamel),
@@ -521,16 +521,7 @@ app.post('/api/data/beacon', async (req, res) => {
         var table = TABLE_MAP[plat];
         await client.query('DELETE FROM ' + table);
       }
-      // Brands
-      if (Array.isArray(db.brands)) {
-        await client.query('DELETE FROM brands');
-        for (var bi = 0; bi < db.brands.length; bi++) {
-          var bCode = db.brands[bi];
-          var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
-          var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
-          await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
-        }
-      }
+      // Brands — ไม่ save ผ่าน beacon แล้ว (ใช้ PUT /api/brands แทน เพื่อป้องกัน stale overwrite)
       // Employees
       if (Array.isArray(db.employees)) {
         var existingEmps = await client.query('SELECT id, email FROM employees');
@@ -539,7 +530,10 @@ app.post('/api/data/beacon', async (req, res) => {
         for (var emp of db.employees) {
           var empKey = (emp.email||'').toLowerCase();
           var exEmp = empMap[empKey];
-          if(exEmp) await client.query('UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5', [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, exEmp.id]);
+          if(exEmp) {
+            var canViewStr = Array.isArray(emp.canView) ? emp.canView.join(',') : (emp.canView||'');
+            await client.query('UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6', [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, canViewStr, exEmp.id]);
+          }
         }
       }
       // Platform data re-insert
@@ -712,9 +706,10 @@ app.put('/api/data', requireAuth, async (req, res) => {
         var empKey = (emp.email||'').toLowerCase();
         var exEmp = empMap[empKey];
         if(exEmp){
+          var canViewStr = Array.isArray(emp.canView) ? emp.canView.join(',') : (emp.canView||'');
           await client.query(
-            'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5',
-            [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, exEmp.id]
+            'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6',
+            [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, canViewStr, exEmp.id]
           );
         }
         // ไม่ INSERT ใหม่ และไม่ DELETE — จัดการผ่านหน้า admin เท่านั้น
@@ -845,7 +840,7 @@ app.put('/api/brands', requireAuth, async (req, res) => {
 // ============================================================
 app.get('/api/employees', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']);
+    const { rows } = await pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs, can_view FROM employees WHERE status = $1 ORDER BY id', ['approved']);
     res.json(rows.map(rowToCamel));
   } catch (err) {
     console.error('GET /api/employees error:', err.message);
@@ -878,15 +873,17 @@ app.put('/api/employees', requireAuth, async (req, res) => {
       var ex = existingMap[emailKey];
       if(ex){
         // Update existing — keep google_id, status, picture
+        var cvStr = Array.isArray(e.canView) ? e.canView.join(',') : (e.canView||'');
         await client.query(
-          'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4 WHERE id=$5',
-          [e.name||'', e.brands||'', e.note||'', e.isAdmin||false, ex.id]
+          'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6',
+          [e.name||'', e.brands||'', e.note||'', e.isAdmin||false, cvStr, ex.id]
         );
       } else {
         // Insert new — status=pending (ต้องอนุมัติแยกต่างหาก)
+        var cvStr2 = Array.isArray(e.canView) ? e.canView.join(',') : (e.canView||'');
         await client.query(
-          'INSERT INTO employees (name, email, brands, note, is_admin, status) VALUES ($1,$2,$3,$4,$5,$6)',
-          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, 'pending']
+          'INSERT INTO employees (name, email, brands, note, is_admin, status, can_view) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+          [e.name||'', e.email||'', e.brands||'', e.note||'', e.isAdmin||false, 'pending', cvStr2]
         );
       }
     }
@@ -1907,6 +1904,14 @@ process.on('unhandledRejection', (err) => {
       console.log('[MIGRATE] Brand sort_order initialized');
     }
   } catch(e){ console.warn('brands migration:', e.message); }
+})();
+
+// Auto-migrate: add can_view column to employees
+(async function(){
+  try {
+    await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS can_view TEXT DEFAULT ''");
+    console.log('[MIGRATE] employees.can_view column ready');
+  } catch(e){ console.warn('employees can_view migration:', e.message); }
 })();
 
 app.listen(PORT, function() {
