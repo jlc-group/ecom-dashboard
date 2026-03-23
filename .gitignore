@@ -3,3 +3,12 @@ node_modules/
 *.log
 .claude/
 .DS_Store
+
+# React dev files (ยังไม่ใช้งาน)
+client/
+dist/
+assets/
+client-package.json
+index-old.html
+index-react.html
+vite.config.js

@@ -1656,7 +1656,7 @@ async function saveAll(){
     google.script.run
       .withSuccessHandler(function(res){
         if(res&&res.success){
-          showToast('✅ บันทึกแล้ว! ('+(res.savedBy||'')+')');;
+          showToast('✅ บันทึกแล้ว! ('+(res.savedBy||'')+')');
           setSaveStatus('ok','✅ บันทึกแล้ว');
         } else {
           showToast('❌ บันทึกไม่สำเร็จ');
@@ -1670,9 +1670,51 @@ async function saveAll(){
       })
       .saveAllData(DB);
   } else if(IS_API){
-    await saveDB();
-    showToast('✅ บันทึกแล้ว!');
-    refreshAll();
+    // === FIX: save ทีละ platform ทีละ brand ผ่าน endpoint ใหม่ ===
+    // ไม่ DELETE ข้อมูลทั้ง table แล้ว — save เฉพาะ brand ที่เลือก
+    setSaveStatus('saving','⏳ กำลังบันทึก...');
+    try {
+      const selBrand = brand && brand !== 'all' ? brand : null;
+      let totalSaved = 0;
+
+      for(const plat of ['tt','sp','lz']){
+        const allRows = DB[plat] || [];
+        if(allRows.length === 0) continue;
+
+        // หา brands ที่ต้อง save
+        let brandsToSave;
+        if(selBrand){
+          brandsToSave = [selBrand];
+        } else {
+          brandsToSave = [...new Set(allRows.map(r => r.brand).filter(Boolean))];
+        }
+
+        for(const b of brandsToSave){
+          const brandRows = allRows.filter(r => r.brand === b);
+          if(brandRows.length === 0) continue;
+
+          const resp = await apiFetch(API_BASE + '/api/daily/' + plat + '/bulk', {
+            method: 'PUT',
+            body: JSON.stringify({ rows: brandRows })
+          });
+          if(!resp.ok){
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(plat + '/' + b + ': ' + (errData.error || resp.status));
+          }
+          totalSaved += brandRows.length;
+        }
+      }
+
+      setSaveStatus('ok','✅ บันทึกแล้ว (' + totalSaved + ' rows)');
+      showToast('✅ บันทึกแล้ว! (' + totalSaved + ' rows)');
+      refreshAll();
+    } catch(e) {
+      console.error('saveAll error:', e);
+      setSaveStatus('err','❌ บันทึกไม่ได้: ' + e.message);
+      showToast('❌ บันทึกไม่สำเร็จ: ' + e.message);
+      // Fallback: save to localStorage
+      localStorage.setItem('ecom_db', JSON.stringify(DB));
+    }
   } else {
     saveDB();
     showToast('✅ บันทึกแล้ว!');

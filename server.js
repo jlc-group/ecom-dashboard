@@ -590,6 +590,65 @@ app.post('/api/config/save', requireAuth, async (req, res) => {
 });
 
 // ============================================================
+// PUT /api/daily/:plat/bulk — Save per-brand rows (SAFE: ไม่ DELETE ทั้ง table)
+// แก้ปัญหาข้อมูลหาย: save เฉพาะ rows ของ 1 brand ไม่กระทบ brand อื่น
+// ============================================================
+app.put('/api/daily/:plat/bulk', requireAuth, async (req, res) => {
+  const plat = req.params.plat;
+  const table = TABLE_MAP[plat];
+  const cols = PLAT_COLS[plat];
+  if (!table || !cols) {
+    return res.status(400).json({ error: 'Invalid platform: ' + plat });
+  }
+
+  const { rows } = req.body;
+  if (!Array.isArray(rows)) {
+    return res.status(400).json({ error: 'rows must be an array' });
+  }
+
+  // หา brand จาก rows — ทุก row ต้องเป็น brand เดียวกัน
+  const brands = [...new Set(rows.map(r => r.brand).filter(Boolean))];
+  if (brands.length === 0) {
+    return res.status(400).json({ error: 'rows must have a brand field' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // DELETE เฉพาะ rows ของ brand(s) ที่ส่งมา — ไม่กระทบ brand อื่น!
+    for (const brand of brands) {
+      await client.query('DELETE FROM ' + table + ' WHERE brand = $1', [brand]);
+    }
+
+    // Insert rows ใหม่
+    const ph = makePH(cols.length);
+    let inserted = 0;
+    for (const row of rows) {
+      const snake = rowToSnake(row);
+      const vals = cols.map(c => cleanVal(c, snake[c]));
+      await client.query(
+        'INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')',
+        vals
+      );
+      inserted++;
+    }
+
+    await client.query('COMMIT');
+
+    const userName = req.user?.name || 'unknown';
+    console.log('[BULK-SAVE] ' + plat + ' brand=' + brands.join(',') + ' rows=' + inserted + ' by=' + userName);
+    res.json({ success: true, platform: plat, brands: brands, inserted: inserted });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[BULK-SAVE] error:', e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
 // PUT /api/data — Save entire DB (mimics the old saveDB)
 // ============================================================
 app.put('/api/data', requireAuth, async (req, res) => {
