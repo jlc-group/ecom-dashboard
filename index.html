@@ -741,6 +741,9 @@ input[type=number]{-moz-appearance:textfield;}
       <option value="today">วันนี้</option>
       <option value="all">ทั้งเดือน</option>
     </select>
+    <select class="sel" id="lineBrandSel" onchange="renderLINE()">
+      <option value="all">ทุกแบรนด์</option>
+    </select>
     <button class="btn btn-primary btn-sm" onclick="renderLINE()">🔄 อัพเดต</button>
     <button class="btn btn-sm" id="btnToggleLineEdit" onclick="toggleLineEditor()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);">✏️ แก้ไข Template</button>
   </div>
@@ -1803,6 +1806,35 @@ function showToast(msg){
 // HELPERS
 // ============================================================
 function fmt(n,d=0){ return Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+// === Comma formatting for input fields (LIVE while typing) ===
+function fmtComma(v){ var n=parseFloat(String(v).replace(/[^0-9.\-]/g,''))||0; return n===0?'':n.toLocaleString('en-US'); }
+function stripComma(v){ return String(v||'').replace(/,/g,''); }
+function liveCommaFmt(inp){
+  // Strip non-numeric except digits and dot
+  var raw = inp.value.replace(/[^0-9.]/g,'');
+  if(!raw){ inp.value=''; return; }
+  // Remember cursor: count digits before cursor in old value
+  var cur = inp.selectionStart||0;
+  var before = inp.value.substring(0,cur).replace(/[^0-9.]/g,'').length;
+  // Format
+  var num = parseFloat(raw)||0;
+  var formatted = num===0&&raw==='0'?'0': num===0?'': num.toLocaleString('en-US');
+  // If user is typing decimal, preserve it
+  if(raw.indexOf('.')>=0){
+    var parts = raw.split('.');
+    var intPart = parseInt(parts[0])||0;
+    formatted = intPart.toLocaleString('en-US') + '.' + (parts[1]||'');
+  }
+  inp.value = formatted;
+  // Restore cursor: find position where digit-count matches `before`
+  var dc=0, newPos=0;
+  for(var i=0;i<formatted.length;i++){
+    if(/[0-9.]/.test(formatted[i])) dc++;
+    if(dc>=before){ newPos=i+1; break; }
+  }
+  if(dc<before) newPos=formatted.length;
+  inp.setSelectionRange(newPos,newPos);
+}
 function fmtB(n){ return '฿'+fmt(n); }
 function p(n){ return parseFloat(n||0)||0; }
 function todayStr(){ return new Date().toISOString().split('T')[0]; }
@@ -1885,7 +1917,7 @@ function getTableRows(plat){
     PLAT_FIELDS[plat].forEach(f => {
       if(f.t==='c'||f.t==='cp'||f.t==='cx') return;
       const el = tr.querySelector(`[data-field="${f.k}"]`);
-      if(el) r[f.k] = el.value || el.tagName==='SELECT' ? el.value : '';
+      if(el) r[f.k] = (f.t==='n') ? stripComma(el.value) : (el.value || el.tagName==='SELECT' ? el.value : '');
     });
     rows.push(calcRow(plat, r));
   });
@@ -1964,15 +1996,15 @@ function renderRow(plat, r={}, idx){
 
     } else if(f.t==='n'){
       const inp = document.createElement('input');
-      inp.type='number'; inp.className='cell'; inp.dataset.field=f.k;
-      inp.value = r[f.k]||''; inp.min='0'; inp.step='any';
-      inp.placeholder='0';
-      inp.addEventListener('input', ()=>{ recalcRow(tr, plat); });
+      inp.type='text'; inp.inputMode='numeric'; inp.className='cell'; inp.dataset.field=f.k;
+      inp.value = fmtComma(r[f.k]||''); inp.placeholder='0';
+      inp.addEventListener('input', ()=>{ liveCommaFmt(inp); recalcRow(tr, plat); });
       // Audit: จับค่าเก่าตอน focus และบันทึก log ตอน blur
-      inp.addEventListener('focus', ()=>{ inp.dataset.oldval = inp.value; });
+      inp.addEventListener('focus', ()=>{ inp.dataset.oldval = stripComma(inp.value); });
       inp.addEventListener('blur', ()=>{
         const ov = inp.dataset.oldval;
-        const nv = inp.value;
+        const nv = stripComma(inp.value);
+        inp.value = fmtComma(inp.value);
         if(ov !== undefined && ov !== nv){
           const dateEl = tr.querySelector('[data-field="date"]');
           const brandEl = tr.querySelector('[data-field="brand"]');
@@ -2017,7 +2049,7 @@ function recalcRow(tr, plat){
   PLAT_FIELDS[plat].forEach(f => {
     if(f.t==='c'||f.t==='cp'||f.t==='cx') return;
     const el = tr.querySelector(`[data-field="${f.k}"]`);
-    if(el) r[f.k] = el.value;
+    if(el) r[f.k] = (f.t==='n') ? stripComma(el.value) : el.value;
   });
   const c = calcRow(plat, r);
   PLAT_FIELDS[plat].forEach(f => {
@@ -2700,8 +2732,8 @@ function buildFlexSummary(rd){
   const bgWhite = '#FFFFFF';
   const separator = '#E0E0E0';
 
-  function mkColor(pct){ return pct<=MK_TARGET ? '#388E3C' : accentRed; }
-  function roasColor(v){ return v>=ROAS_TARGET ? '#388E3C' : warn; }
+  function mkColor(pct){ return pct<=MK_TARGET ? '#333333' : accentRed; }
+  function roasColor(v){ return darkText; }
   function fcColor(pct){ return pct>=100?'#388E3C':pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
 
   // Progress bar boxes
@@ -2739,16 +2771,8 @@ function buildFlexSummary(rd){
           {type:'text',text:'฿'+fmt(rd.todayData.gmv),size:'sm',color:darkText,weight:'bold',align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:'Ads',size:'sm',color:muted,flex:2},
-          {type:'text',text:'฿'+fmt(rd.todayData.ads),size:'sm',color:darkText,align:'end',flex:4}
-        ]},
-        {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'MK%',size:'sm',color:muted,flex:2},
           {type:'text',text:rd.todayMkPct.toFixed(1)+'%',size:'sm',color:mkColor(rd.todayMkPct),weight:'bold',align:'end',flex:4}
-        ]},
-        {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:'ROAS',size:'sm',color:muted,flex:2},
-          {type:'text',text:rd.todayRoas.toFixed(1)+'x',size:'sm',color:roasColor(rd.todayRoas),weight:'bold',align:'end',flex:4}
         ]},
       ]},
       {type:'separator',color:separator},
@@ -2761,11 +2785,7 @@ function buildFlexSummary(rd){
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'เฉลี่ย/วัน',size:'sm',color:muted,flex:3},
-          {type:'text',text:'฿'+fmt(Math.round(rd.monthAvg)),size:'sm',color:'#1565C0',weight:'bold',align:'end',flex:4}
-        ]},
-        {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:'Ads สะสม',size:'sm',color:muted,flex:3},
-          {type:'text',text:'฿'+fmt(rd.monthData.ads),size:'sm',color:darkText,align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(Math.round(rd.monthAvg)),size:'sm',color:darkText,weight:'bold',align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'MK%',size:'sm',color:muted,flex:3},
@@ -2788,12 +2808,7 @@ function buildFlexSummary(rd){
         {type:'text',text:'วันนี้',size:'xs',color:muted,align:'end',flex:3},
         {type:'text',text:'เดือน',size:'xs',color:muted,align:'end',flex:3}
       ]},
-    ].concat(platRows).concat([
-      {type:'separator',color:separator},
-      {type:'box',layout:'vertical',backgroundColor:'#E8F5E9',cornerRadius:'8px',paddingAll:'10px',margin:'sm',contents:[
-        {type:'text',text:rd.motivation,size:'sm',color:'#2E7D32',wrap:true,align:'center'}
-      ]}
-    ])}
+    ].concat(platRows)}
   };
 
   // Add MK warnings if any
@@ -2831,27 +2846,28 @@ function buildFlexBrandCarousel(rd){
   const bubbles = [];
   let colorIdx = 0;
 
-  // Sort brands by preferred order
-  const sortedBrands = LINE_BRAND_ORDER.filter(b => BRANDS.map(x=>x.toLowerCase()).includes(b.toLowerCase()));
-  BRANDS.forEach(b => { if(!sortedBrands.find(s=>s.toLowerCase()===b.toLowerCase())) sortedBrands.push(b); });
+  // Sort brands by preferred order + ซ่อน JNIS, BEAUTERRY
+  const hiddenBrands = ['JNIS','BEAUTERRY'];
+  const activeBrands = BRANDS.filter(b => hiddenBrands.indexOf(b.toUpperCase()) < 0);
+  const sortedBrands = LINE_BRAND_ORDER.filter(b => activeBrands.map(x=>x.toLowerCase()).includes(b.toLowerCase()));
+  activeBrands.forEach(b => { if(!sortedBrands.find(s=>s.toLowerCase()===b.toLowerCase())) sortedBrands.push(b); });
 
   sortedBrands.forEach(function(b){
     const bMonth = rd.monthData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0,byPlat:{}};
     const bToday = rd.todayData.byBrand[b] || {gmv:0,orders:0,ads:0,totalCost:0,nm:0,byPlat:{}};
     const bGmv = bMonth?.gmv||0;
     const bTodayGmv = bToday?.gmv||0;
-    const bAds = bMonth?.ads||0;
     const bTotalCost = bMonth?.totalCost||0;
-    const bOrders = bMonth?.orders||0;
-    const bTodayOrders = bToday?.orders||0;
-    const bRoas = bAds>0?bGmv/bAds:0;
+    const bTodayTotalCost = bToday?.totalCost||0;
     const bFcTarget = rd.brandFc[b]||0;
     const bFcPct = bFcTarget>0?(bGmv/bFcTarget*100):0;
     const bFcGap = Math.max(0, bFcTarget-bGmv);
     const bMkPct = bGmv>0?(bTotalCost/bGmv*100):0;
+    const bTodayMkPct = bTodayGmv>0?(bTodayTotalCost/bTodayGmv*100):0;
     const icon = bFcPct>=100?'🏆':bFcPct>=70?'🟢':bFcPct>=40?'🟡':'🔴';
     const daysRemain = rd.daysRemain;
     const bDailyNeed = daysRemain>0 ? bFcGap/daysRemain : 0;
+    const bAvg = rd.daysPassed>0 ? bGmv/rd.daysPassed : 0;
 
     // Progress bar
     const barFilled = Math.min(10, Math.round(Math.min(100,bFcPct)/10));
@@ -2866,46 +2882,55 @@ function buildFlexBrandCarousel(rd){
       const tGmv = bToday?.byPlat?.[pl.k]?.gmv || 0;
       const mGmv = bMonth?.byPlat?.[pl.k]?.gmv || 0;
       return {type:'box',layout:'horizontal',contents:[
-        {type:'text',text:pl.label,size:'xs',color:platColors[pl.k]||muted,flex:2},
-        {type:'text',text:'฿'+fmt(tGmv),size:'xs',color:darkText,weight:'bold',align:'end',flex:3},
-        {type:'text',text:'฿'+fmt(mGmv),size:'xs',color:muted,align:'end',flex:3}
-      ],margin:'xs'};
+        {type:'text',text:pl.label,size:'sm',color:platColors[pl.k]||muted,weight:'bold',flex:2},
+        {type:'text',text:'฿'+fmt(tGmv),size:'sm',color:darkText,align:'end',flex:3},
+        {type:'text',text:'฿'+fmt(mGmv),size:'sm',color:darkText,align:'end',flex:3}
+      ],margin:'sm'};
     });
 
     const hdrColor = brandHeaderColors[b.toLowerCase()] || defaultHeaderColors[colorIdx % defaultHeaderColors.length];
     colorIdx++;
 
     bubbles.push({
-      type:'bubble',size:'kilo',
+      type:'bubble',size:'mega',
       styles:{header:{backgroundColor:hdrColor},body:{backgroundColor:white}},
       header:{type:'box',layout:'vertical',contents:[
-        {type:'text',text:icon+' '+b,size:'lg',weight:'bold',color:white},
-        {type:'text',text:rd.dateLabel,size:'xs',color:'rgba(255,255,255,0.7)',margin:'xs'}
-      ],paddingAll:'14px'},
-      body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',contents:[
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:icon,size:'xl',flex:0},
+          {type:'box',layout:'vertical',contents:[
+            {type:'text',text:b,size:'lg',weight:'bold',color:white},
+            {type:'text',text:'Daily Report — '+rd.dateLabel,size:'xs',color:'rgba(255,255,255,0.7)'}
+          ],paddingStart:'md'}
+        ],alignItems:'center'}
+      ],paddingAll:'16px'},
+      body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'16px',contents:[
         // ── ยอดวันนี้ ──
-        {type:'text',text:'วันนี้',weight:'bold',color:accentGreen,size:'xs'},
-        hRow('GMV','฿'+fmt(bTodayGmv)),
+        {type:'text',text:'ยอดวันนี้',weight:'bold',color:accentGreen,size:'sm'},
+        {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+          hRow('GMV','฿'+fmt(bTodayGmv)),
+          hRow('MK%',bTodayMkPct.toFixed(1)+'%',mkColor(bTodayMkPct))
+        ]},
         {type:'separator',color:separator},
         // ── สะสมเดือน ──
-        {type:'text',text:'เดือน '+rd.monthName,weight:'bold',color:'#1565C0',size:'xs'},
-        hRow('GMV สะสม','฿'+fmt(bGmv)),
-        hRow('Ads','฿'+fmt(bAds)),
-        hRow('MK%',bMkPct.toFixed(1)+'%',mkColor(bMkPct)),
-        hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=ROAS_TARGET?'#388E3C':warn),
+        {type:'text',text:'สะสมเดือน '+rd.monthName+' ('+rd.daysPassed+' วัน)',weight:'bold',color:'#1565C0',size:'sm'},
+        {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
+          hRow('GMV สะสม','฿'+fmt(bGmv)),
+          hRow('เฉลี่ย/วัน','฿'+fmt(Math.round(bAvg)),darkText),
+          hRow('MK%',bMkPct.toFixed(1)+'%',mkColor(bMkPct))
+        ]},
         {type:'separator',color:separator},
         // ── FC ──
-        {type:'text',text:'FC: ฿'+fmt(bFcTarget),weight:'bold',color:warn,size:'xs'},
-        {type:'box',layout:'horizontal',spacing:'xs',contents:barBoxes,margin:'xs'},
-        {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:bFcPct.toFixed(1)+'%',size:'xs',color:fcColor(bFcPct),weight:'bold'},
-          {type:'text',text:'ขาด ฿'+fmt(bFcGap),size:'xs',color:accentRed,align:'end'}
+        {type:'text',text:'เป้า FC: ฿'+fmt(bFcTarget),weight:'bold',color:warn,size:'sm'},
+        {type:'box',layout:'horizontal',spacing:'xs',contents:barBoxes,margin:'sm'},
+        {type:'box',layout:'horizontal',margin:'xs',contents:[
+          {type:'text',text:'ทำได้ '+bFcPct.toFixed(1)+'%',size:'xs',color:fcColor(bFcPct),weight:'bold'},
+          {type:'text',text:'ขาด ฿'+fmt(Math.round(bFcGap)),size:'xs',color:accentRed,align:'end'}
         ]},
-        {type:'text',text:'ต้องทำ/วัน ฿'+fmt(Math.round(bDailyNeed)),size:'xs',color:muted},
+        {type:'text',text:'ต้องทำ/วัน ฿'+fmt(Math.round(bDailyNeed))+' (เหลือ '+daysRemain+' วัน)',size:'xs',color:muted,margin:'xs'},
         {type:'separator',color:separator},
         // ── Per platform ──
         {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:'',size:'xs',color:muted,flex:2},
+          {type:'text',text:'ช่องทาง',size:'xs',color:muted,flex:2},
           {type:'text',text:'วันนี้',size:'xs',color:muted,align:'end',flex:3},
           {type:'text',text:'เดือน',size:'xs',color:muted,align:'end',flex:3}
         ]}
@@ -2913,11 +2938,8 @@ function buildFlexBrandCarousel(rd){
     });
   });
 
-  // Return carousel container
-  return {
-    type:'carousel',
-    contents: bubbles
-  };
+  // Return array of bubbles (not carousel)
+  return bubbles;
 }
 
 // ── Render Flex Preview as HTML (mimics LINE look) ──
@@ -2979,15 +3001,17 @@ function renderFlexPreview(bubble, containerId){
 }
 
 // ── Render brand bubbles vertically ──
-function renderCarouselPreview(carousel, containerId){
+function renderCarouselPreview(bubbles, containerId){
   const el = document.getElementById(containerId);
   if(!el) return;
-  if(!carousel || !carousel.contents || !carousel.contents.length){
+  // รองรับทั้ง array of bubbles และ carousel object
+  var list = Array.isArray(bubbles) ? bubbles : (bubbles && bubbles.contents ? bubbles.contents : []);
+  if(!list.length){
     el.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">ยังไม่มีข้อมูลแบรนด์</div>';
     return;
   }
-  el.innerHTML = carousel.contents.map(function(bubble){
-    return '<div style="width:100%;">' + renderBubbleHTML(bubble) + '</div>';
+  el.innerHTML = list.map(function(bubble){
+    return '<div style="width:100%;margin-bottom:16px;">' + renderBubbleHTML(bubble) + '</div>';
   }).join('');
 }
 
@@ -3614,9 +3638,10 @@ function renderForecast(){
       vals.forEach((v,mi)=>{
         const isCur = mi===curMonthIdx;
         html += `<td style="padding:1px;${isCur?'background:rgba(108,99,255,.08);':''}" >
-          <input class="fc-input" type="number" value="${v||''}" placeholder="0"
-            onchange="fcUpdate('${brand}','${p.k}',${mi},this.value)"
-            style="${isCur?'color:var(--accent);font-weight:600;':''}">
+          <input class="fc-input" type="text" inputmode="numeric" value="${v?fmtComma(v):''}" placeholder="0"
+            oninput="liveCommaFmt(this);fcUpdate('${brand}','${p.k}',${mi},stripComma(this.value))"
+            onblur="this.value=fmtComma(this.value);"
+            style="${isCur?'color:var(--accent);font-weight:600;':''}"> 
         </td>`;
       });
       html += `<td class="fc-year-total">${yearTotal>0?'฿'+fmt(yearTotal):'-'}</td></tr>`;
