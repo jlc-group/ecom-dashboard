@@ -584,10 +584,10 @@ app.get('/api/debug/config', async (req, res) => {
 });
 
 // ============================================================
-// PATCH /api/config — Save config values ONLY (lightweight, no platform data)
+// POST /api/config/save — Save config values ONLY (lightweight, no platform data)
 // ============================================================
-app.patch('/api/config', requireAuth, async (req, res) => {
-  console.log('[PATCH /api/config] body:', JSON.stringify(req.body));
+app.post('/api/config/save', requireAuth, async (req, res) => {
+  console.log('[CONFIG-SAVE] body:', JSON.stringify(req.body));
   try {
     var data = req.body;
     var configKeys = {

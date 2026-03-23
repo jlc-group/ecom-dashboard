@@ -1433,14 +1433,14 @@ async function saveDB(){
 }
 
 // ============================================================
-// SAVE CONFIG ONLY — lightweight PATCH (ไม่แตะ platform/brand data)
+// SAVE CONFIG ONLY — lightweight POST (ไม่แตะ platform/brand data)
 // ============================================================
 async function saveConfig(configObj){
   if(!IS_API) return saveDB();
   try {
     setSaveStatus('saving','⏳ กำลังบันทึก...');
-    const resp = await apiFetch(API_BASE + '/api/config', {
-      method: 'PATCH',
+    const resp = await apiFetch(API_BASE + '/api/config/save', {
+      method: 'POST',
       body: JSON.stringify(configObj)
     });
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
