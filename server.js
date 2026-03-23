@@ -805,12 +805,14 @@ app.put('/api/data', requireAuth, async (req, res) => {
 // ============================================================
 app.post('/api/audit', requireAuth, async (req, res) => {
   try {
-    const e = req.body;
-    await pool.query(
-      'INSERT INTO audit_log (ts, user_name, action, platform, data_date, brand, field, old_val, new_val) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [e.ts||new Date().toISOString(), e.user||'', e.action||'', e.platform||'',
-       e.dataDate||'', e.brand||'', e.field||'', e.oldVal||'', e.newVal||'']
-    );
+    const entries = Array.isArray(req.body) ? req.body : [req.body];
+    for(const e of entries) {
+      await pool.query(
+        'INSERT INTO audit_log (ts, user_name, action, platform, data_date, brand, field, old_val, new_val) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [e.ts||new Date().toISOString(), e.user||'', e.action||'', e.platform||'',
+         e.dataDate||'', e.brand||'', e.field||'', e.oldVal||'', e.newVal||'']
+      );
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('POST /api/audit error:', err);

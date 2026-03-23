@@ -1781,6 +1781,20 @@ async function saveAll(){
           totalSaved += brandRows.length;
         }
       }
+      // === SAVE AUDIT LOGS ===
+      const unsavedLogs = (DB.auditLog || []).filter(e => e.id && typeof e.id === 'number' && e.id > 1e12);
+      if(unsavedLogs.length > 0){
+        try {
+          await apiFetch(API_BASE + '/api/audit', {
+            method: 'POST',
+            body: JSON.stringify(unsavedLogs)
+          });
+          // เปลี่ยน id เป็น String เพื่อไม่ให้โดนจับมาส่งซ้ำ
+          unsavedLogs.forEach(e => { e.id = String(e.id); });
+        } catch(err) {
+          console.error('Audit save error:', err);
+        }
+      }
 
       setSaveStatus('ok','✅ บันทึกแล้ว (' + totalSaved + ' rows)');
       showToast('✅ บันทึกแล้ว! (' + totalSaved + ' rows)');
