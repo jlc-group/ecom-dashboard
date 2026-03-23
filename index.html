@@ -1505,6 +1505,7 @@ async function initApp(){
       renderDashboard();
       showLoadingOverlay(false);
       setSaveStatus('ok','✅ โหลดข้อมูลจาก API แล้ว');
+      checkAndRestoreDraft(); // ตรวจ draft ค้างจาก session ก่อน
       await loadLineTemplates();
       loadReminderTemplate(); // โหลด template เตือนทีม
       loadUserManagement(); // Load admin user panel if admin
@@ -1616,21 +1617,65 @@ async function autoSaveAPI(){
   }
 }
 
-// Save เมื่อออกจากหน้า (beforeunload) — ใช้ sendBeacon เพื่อให้ส่งได้แม้หน้าจะปิด
-function saveOnLeave(){
-  if(!IS_API || !AUTH_TOKEN) return;
-  // Sync sheet data from DOM (merge เฉพาะ brand+month ที่แสดง ไม่ทับ brand อื่น)
-  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
-  // Sync LINE config from DOM
-  // NOTE: ไม่ sync LINE config จาก DOM ที่นี่ เพราะถ้า LINE tab ยังไม่ถูกเปิด
-  // input จะมีค่า default (09:00, 17:00) ซึ่งจะทับค่าจริงใน DB
-  // LINE config ใช้ saveConfig() ผ่าน onchange แทน
-  // ไม่ sync employee data จาก DOM ใน beacon แล้ว
-  // เพราะ beacon ส่งข้อมูลเก่า ทับค่าที่ user อื่น save ไว้ (เช่น canView, ชื่อ)
-  // Employee data ต้อง save ผ่านปุ่ม "บันทึกพนักงาน" หรือ "บันทึกสิทธิ์" เท่านั้น
-  // ใช้ sendBeacon — ส่งได้แม้หน้าจะปิด (ไม่ถูก cancel เหมือน fetch)
-  const blob = new Blob([JSON.stringify(DB)], {type:'application/json'});
-  navigator.sendBeacon(API_BASE + '/api/data/beacon?token=' + AUTH_TOKEN, blob);
+// ============================================================
+// DRAFT SYSTEM — ป้องกันข้อมูลหายเมื่อเปลี่ยนหน้า/ลืม save
+// save ลง localStorage ทุกครั้งที่แก้ข้อมูล (ไม่ hit server)
+// ============================================================
+var _draftDirty = false;
+
+// Save draft ลง localStorage (เรียกตอนแก้ข้อมูลตาราง)
+function saveDraft(){
+  if(!IS_API) return;
+  try {
+    ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
+    const draftData = { tt: DB.tt, sp: DB.sp, lz: DB.lz, ts: Date.now() };
+    localStorage.setItem('ecom_draft', JSON.stringify(draftData));
+    _draftDirty = true;
+    setSaveStatus('draft','💾 Draft บันทึกแล้ว (ยังไม่ save)');
+  } catch(e) {
+    console.warn('saveDraft error:', e);
+  }
+}
+
+// ลบ draft หลัง save สำเร็จ
+function clearDraft(){
+  localStorage.removeItem('ecom_draft');
+  _draftDirty = false;
+}
+
+// Restore draft ถ้ามี — เรียกหลัง loadDB
+function checkAndRestoreDraft(){
+  if(!IS_API) return;
+  try {
+    const raw = localStorage.getItem('ecom_draft');
+    if(!raw) return;
+    const draft = JSON.parse(raw);
+    const age = Date.now() - (draft.ts || 0);
+    // Draft เก่าเกิน 24 ชม. → ลบทิ้ง
+    if(age > 24 * 60 * 60 * 1000){ localStorage.removeItem('ecom_draft'); return; }
+    const mins = Math.round(age / 60000);
+    if(confirm('🔔 พบข้อมูลที่ยังไม่ได้บันทึก (' + mins + ' นาทีก่อน)\n\nต้องการเรียกคืนหรือไม่?')){
+      if(draft.tt) DB.tt = draft.tt;
+      if(draft.sp) DB.sp = draft.sp;
+      if(draft.lz) DB.lz = draft.lz;
+      showToast('✅ เรียกคืน draft แล้ว — กด "บันทึก" เพื่อ save ลง server');
+      renderSheet();
+    } else {
+      localStorage.removeItem('ecom_draft');
+    }
+  } catch(e) {
+    console.warn('checkDraft error:', e);
+  }
+}
+
+// เตือนเมื่อจะปิดหน้า ถ้ายัง save ไม่สำเร็จ
+function saveOnLeave(e){
+  if(!_draftDirty || !IS_API || !AUTH_TOKEN) return;
+  // Save draft ล่าสุดก่อนปิด
+  saveDraft();
+  e.preventDefault();
+  e.returnValue = 'มีข้อมูลที่ยังไม่ได้บันทึก — ต้องการออกจริงหรือไม่?';
+  return e.returnValue;
 }
 
 function autoSaveGAS(){
@@ -1707,6 +1752,7 @@ async function saveAll(){
 
       setSaveStatus('ok','✅ บันทึกแล้ว (' + totalSaved + ' rows)');
       showToast('✅ บันทึกแล้ว! (' + totalSaved + ' rows)');
+      clearDraft(); // ลบ draft หลัง save สำเร็จ
       refreshAll();
     } catch(e) {
       console.error('saveAll error:', e);
@@ -2575,26 +2621,11 @@ let _autoSaveTimer = null;
 function triggerAutoSave(){
   if(_autoSaveTimer) clearTimeout(_autoSaveTimer);
   setSaveStatus('saving','⏳ รอบันทึก...');
-  _autoSaveTimer = setTimeout(async ()=>{  // 3 วินาที
+  _autoSaveTimer = setTimeout(()=>{
     _autoSaveTimer = null;
-    // Sync all daily tables to DB object
-    ['tt','sp','lz'].forEach(plat=>{
-      const tbody=document.getElementById('tbody-'+plat);
-      if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
-    });
-    if(!IS_API) { saveDB(); setSaveStatus('ok','✅ บันทึกแล้ว'); return; }
-    try {
-      const resp = await apiFetch(API_BASE + '/api/data', {
-        method: 'PUT',
-        body: JSON.stringify(DB)
-      });
-      if(resp.ok) setSaveStatus('ok','✅ บันทึกแล้ว');
-      else throw new Error('HTTP ' + resp.status);
-    } catch(e) {
-      console.warn('Auto-save failed:', e);
-      setSaveStatus('err','⚠️ บันทึกไม่ได้');
-    }
-  }, 3000);
+    // Save draft ลง localStorage (ไม่ hit server)
+    saveDraft();
+  }, 2000);
 }
 
 // Global event delegation: any input/select change triggers auto-save
