@@ -308,6 +308,41 @@ app.post('/api/admin/approve-user', requireAuth, async function(req, res) {
   }
 });
 
+// POST /api/admin/delete-user — Admin: ลบพนักงานที่ถูกปฏิเสธ (rejected only)
+app.post('/api/admin/delete-user', requireAuth, async function(req, res) {
+  try {
+    var userId = req.body.userId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+
+    // เช็คว่า user ต้องเป็น rejected เท่านั้น
+    var { rows } = await pool.query('SELECT status, email, name FROM employees WHERE id = $1', [userId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'user not found' });
+    if (rows[0].status !== 'rejected') {
+      return res.status(400).json({ error: 'ลบได้เฉพาะพนักงานที่ถูกปฏิเสธแล้วเท่านั้น' });
+    }
+
+    console.log('[ADMIN] delete-user:', userId, rows[0].email, rows[0].name);
+
+    var client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL myapp.admin_approve = 'true'");
+      await client.query('DELETE FROM employees WHERE id = $1', [userId]);
+      await client.query('COMMIT');
+    } catch(e2) {
+      await client.query('ROLLBACK');
+      throw e2;
+    } finally {
+      client.release();
+    }
+
+    res.json({ success: true, deleted: userId });
+  } catch (err) {
+    console.error('POST /api/admin/delete-user error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/set-visible-tabs — Admin: set which tabs a user can see
 app.post('/api/admin/set-visible-tabs', requireAuth, async function(req, res) {
   try {
