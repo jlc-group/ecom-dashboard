@@ -3879,7 +3879,7 @@ async function saveAPM(silent){
       if(!silent){ setSaveStatus('ok','✅ บันทึกแล้ว'); showToast('✅ บันทึก APM Task แล้ว!'); }
     } catch(e){
       console.error('saveAPM error:', e);
-      if(!silent){ setSaveStatus('err','❌ บันทึกไม่ได้'); }
+      if(!silent){ setSaveStatus('err','❌ บันทึกไม่ได้'); showToast('❌ APM: '+e.message); }
     }
   } else {
     await saveDB();

@@ -896,6 +896,10 @@ app.put('/api/apm', requireAuth, async (req, res) => {
     var tasks = req.body.apmTasks || [];
     await client.query('BEGIN');
     await client.query('DELETE FROM apm_tasks');
+    // Reset serial sequence (สร้าง fallback ถ้ายังไม่มี)
+    await client.query("SELECT setval(pg_get_serial_sequence('apm_tasks','id'), 1, false)").catch(function(){
+      return client.query("CREATE SEQUENCE IF NOT EXISTS apm_tasks_id_seq; ALTER TABLE apm_tasks ALTER COLUMN id SET DEFAULT nextval('apm_tasks_id_seq'); SELECT setval('apm_tasks_id_seq', 1, false);");
+    });
     for (var t of tasks) {
       await client.query(
         'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
