@@ -531,10 +531,10 @@ input[type=number]{-moz-appearance:textfield;}
       <table class="sum-table">
         <thead><tr><th>รายการ</th><th>ค่า</th><th>หมายเหตุ</th></tr></thead>
         <tbody>
-          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
-          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
-          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;" onchange="DB.lineSendSummary=this.value;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
-          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;" onchange="DB.lineSendBrand=this.value;"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>Channel Access Token</td><td><input id="lineToken" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ token" onchange="DB.lineToken=this.value;saveConfig({lineToken:this.value});"></td><td style="font-size:11px;color:var(--muted)">จาก LINE Developers Console</td></tr>
+          <tr><td>Group ID</td><td><input id="lineGroup" class="cell left" style="width:100%;border:1px solid var(--border);border-radius:4px;background:var(--surface2);" placeholder="ใส่ Group ID" onchange="DB.lineGroup=this.value;saveConfig({lineGroup:this.value});"></td><td style="font-size:11px;color:var(--muted)">ดูจาก Webhook หรือ webhook.site</td></tr>
+          <tr><td>ส่งสรุปรวม</td><td><select id="lineSendSummary" class="sel" style="width:120px;" onchange="DB.lineSendSummary=this.value;saveConfig({lineSendSummary:this.value});"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
+          <tr><td>ส่งแยกแบรนด์</td><td><select id="lineSendBrand" class="sel" style="width:120px;" onchange="DB.lineSendBrand=this.value;saveConfig({lineSendBrand:this.value});"><option value="YES">YES</option><option value="NO">NO</option></select></td><td></td></tr>
           <tr><td>API ตารางส่ง</td><td><code style="font-size:11px;color:var(--accent);">/api/line/schedule</code></td><td style="font-size:11px;color:var(--muted)">ให้ Scheduler ภายนอกเรียกดึงข้อความ+เวลาส่ง</td></tr>
         </tbody>
       </table>
@@ -785,7 +785,7 @@ input[type=number]{-moz-appearance:textfield;}
         <div class="card-title" style="margin:0;">📊 Summary Report (Flex Card)</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-          <input id="lineSumTime" type="time" class="cell" value="09:00" oninput="DB.lineSumSendTime=this.value;" onchange="DB.lineSumSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+          <input id="lineSumTime" type="time" class="cell" value="09:00" oninput="DB.lineSumSendTime=this.value;" onchange="DB.lineSumSendTime=this.value;saveConfig({lineSumSendTime:this.value});" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
         </div>
       </div>
       <div style="display:flex;justify-content:center;">
@@ -802,7 +802,7 @@ input[type=number]{-moz-appearance:textfield;}
         <div class="card-title" style="margin:0;">🏷️ Brand Report (แต่ละแบรนด์)</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-          <input id="lineBrandTime" type="time" class="cell" value="09:00" oninput="DB.lineBrandSendTime=this.value;" onchange="DB.lineBrandSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+          <input id="lineBrandTime" type="time" class="cell" value="09:00" oninput="DB.lineBrandSendTime=this.value;" onchange="DB.lineBrandSendTime=this.value;saveConfig({lineBrandSendTime:this.value});" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
         </div>
       </div>
       <div id="lineBrandMsg" style="display:flex;flex-direction:column;gap:16px;padding:8px 0;max-width:400px;margin:0 auto;"></div>
@@ -818,7 +818,7 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="card-title" style="margin:0;">💚 ข้อความเตือนทีม (Daily Reminder)</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-        <input id="lineReminderTime" type="time" class="cell" value="17:00" oninput="DB.lineReminderSendTime=this.value;" onchange="DB.lineReminderSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+        <input id="lineReminderTime" type="time" class="cell" value="17:00" oninput="DB.lineReminderSendTime=this.value;" onchange="DB.lineReminderSendTime=this.value;saveConfig({lineReminderSendTime:this.value});" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
       </div>
     </div>
     <div style="color:var(--muted);font-size:11px;margin-bottom:10px;">
@@ -1430,6 +1430,30 @@ async function saveDB(){
 
   // Standalone
   localStorage.setItem('ecom_db', JSON.stringify(DB));
+}
+
+// ============================================================
+// SAVE CONFIG ONLY — lightweight PATCH (ไม่แตะ platform/brand data)
+// ============================================================
+async function saveConfig(configObj){
+  if(!IS_API) return saveDB();
+  try {
+    setSaveStatus('saving','⏳ กำลังบันทึก...');
+    const resp = await apiFetch(API_BASE + '/api/config', {
+      method: 'PATCH',
+      body: JSON.stringify(configObj)
+    });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const result = await resp.json();
+    if(result.success){
+      setSaveStatus('ok','✅ บันทึกแล้ว');
+    } else {
+      throw new Error(result.error || 'Unknown error');
+    }
+  } catch(e) {
+    console.error('saveConfig error:', e);
+    setSaveStatus('err','❌ บันทึกไม่ได้');
+  }
 }
 
 // ============================================================
@@ -2906,9 +2930,16 @@ function saveReminderTemplate(){
   DB.reminderItem2Desc = document.getElementById('reminderItem2Desc')?.textContent || '';
   DB.reminderThankMsg = document.getElementById('reminderThankMsg')?.textContent || '';
   DB.reminderTitle = document.getElementById('reminderTitle')?.textContent || '';
-  // debounced save
+  // debounced save (config only — ไม่แตะ platform data)
   clearTimeout(window._reminderSaveTimer);
-  window._reminderSaveTimer = setTimeout(()=>saveDB(), 1000);
+  window._reminderSaveTimer = setTimeout(()=>saveConfig({
+    reminderTitle: DB.reminderTitle,
+    reminderItem1Title: DB.reminderItem1Title,
+    reminderItem1Desc: DB.reminderItem1Desc,
+    reminderItem2Title: DB.reminderItem2Title,
+    reminderItem2Desc: DB.reminderItem2Desc,
+    reminderThankMsg: DB.reminderThankMsg
+  }), 1000);
 }
 
 function loadReminderTemplate(){
@@ -2994,7 +3025,7 @@ async function saveLineTemplates(){
   // บันทึกลง DB object เพื่อให้ saveDB/autosave เก็บค่าด้วย
   DB.lineTemplates = JSON.stringify({sum:LINE_SUM_TPL,brand:LINE_BRAND_TPL,brandRow:LINE_BRAND_ROW_TPL});
   if(IS_API){
-    await saveDB();
+    await saveConfig({lineTemplates: DB.lineTemplates});
     showToast('✅ บันทึก Template แล้ว!');
   } else {
     localStorage.setItem('line_templates', JSON.stringify({sum:LINE_SUM_TPL,brand:LINE_BRAND_TPL,brandRow:LINE_BRAND_ROW_TPL}));
@@ -3148,7 +3179,7 @@ function copyLineMsgText(id){
 async function saveLineCustomMsgs(){
   DB.lineCustomMsgs = JSON.stringify(LINE_CUSTOM_MSGS);
   if(IS_API){
-    await saveDB();
+    await saveConfig({lineCustomMsgs: DB.lineCustomMsgs});
     showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
   } else {
     localStorage.setItem('line_custom_msgs', JSON.stringify(LINE_CUSTOM_MSGS));

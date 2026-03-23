@@ -565,6 +565,61 @@ app.post('/api/data/beacon', async (req, res) => {
 });
 
 // ============================================================
+// PATCH /api/config — Save config values ONLY (lightweight, no platform data)
+// ============================================================
+app.patch('/api/config', requireAuth, async (req, res) => {
+  try {
+    var data = req.body;
+    var configKeys = {
+      lineToken:'line_token', lineGroup:'line_group', lineSendTime:'line_send_time',
+      lineSumSendTime:'line_sum_send_time', lineBrandSendTime:'line_brand_send_time',
+      lineReminderSendTime:'line_reminder_send_time', lineSendSummary:'line_send_summary',
+      lineSendBrand:'line_send_brand'
+    };
+    var saved = [];
+    for (var jsKey of Object.keys(configKeys)) {
+      if (data[jsKey] !== undefined) {
+        await pool.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [configKeys[jsKey], data[jsKey]]);
+        saved.push(jsKey);
+      }
+    }
+    // Reminder template fields
+    var reminderTpl = {};
+    if (data.reminderTitle !== undefined) reminderTpl.title = data.reminderTitle;
+    if (data.reminderItem1Title !== undefined) reminderTpl.item1Title = data.reminderItem1Title;
+    if (data.reminderItem1Desc !== undefined) reminderTpl.item1Desc = data.reminderItem1Desc;
+    if (data.reminderItem2Title !== undefined) reminderTpl.item2Title = data.reminderItem2Title;
+    if (data.reminderItem2Desc !== undefined) reminderTpl.item2Desc = data.reminderItem2Desc;
+    if (data.reminderThankMsg !== undefined) reminderTpl.thankMsg = data.reminderThankMsg;
+    if (Object.keys(reminderTpl).length > 0) {
+      // Merge with existing template
+      var existing = {};
+      try {
+        var { rows } = await pool.query("SELECT value FROM config WHERE key = 'reminder_template'");
+        if (rows.length > 0) existing = JSON.parse(rows[0].value || '{}');
+      } catch(e){}
+      Object.assign(existing, reminderTpl);
+      await pool.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(existing)]);
+      saved.push('reminderTemplate');
+    }
+    // LINE templates & custom messages
+    if (data.lineTemplates !== undefined) {
+      await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof data.lineTemplates === 'string' ? data.lineTemplates : JSON.stringify(data.lineTemplates)]);
+      saved.push('lineTemplates');
+    }
+    if (data.lineCustomMsgs !== undefined) {
+      await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof data.lineCustomMsgs === 'string' ? data.lineCustomMsgs : JSON.stringify(data.lineCustomMsgs)]);
+      saved.push('lineCustomMsgs');
+    }
+    console.log('[CONFIG] saved:', saved.join(', '));
+    res.json({ success: true, saved: saved });
+  } catch(e) {
+    console.error('[CONFIG] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================
 // PUT /api/data — Save entire DB (mimics the old saveDB)
 // ============================================================
 app.put('/api/data', requireAuth, async (req, res) => {
