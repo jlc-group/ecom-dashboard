@@ -1628,23 +1628,9 @@ function saveOnLeave(){
   // NOTE: ไม่ sync LINE config จาก DOM ที่นี่ เพราะถ้า LINE tab ยังไม่ถูกเปิด
   // input จะมีค่า default (09:00, 17:00) ซึ่งจะทับค่าจริงใน DB
   // LINE config ใช้ saveConfig() ผ่าน onchange แทน
-  // Sync employee data from DOM
-  const empTbody = document.getElementById('empConfigTable');
-  if(empTbody && empTbody.children.length > 0){
-    const rows = empTbody.querySelectorAll('tr');
-    const emps = [];
-    rows.forEach((tr,idx)=>{
-      const name = tr.querySelector('[data-field="name"]')?.value?.trim();
-      const email = tr.querySelector('[data-field="email"]')?.value?.trim();
-      const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
-      const note = tr.querySelector('[data-field="note"]')?.value?.trim();
-      const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
-      const oldEmp = (DB.employees||[])[idx];
-      const canView = oldEmp?.canView || [];
-      if(name) emps.push({name, email, brands, note, isAdmin, canView});
-    });
-    if(emps.length > 0) DB.employees = emps;
-  }
+  // ไม่ sync employee data จาก DOM ใน beacon แล้ว
+  // เพราะ beacon ส่งข้อมูลเก่า ทับค่าที่ user อื่น save ไว้ (เช่น canView, ชื่อ)
+  // Employee data ต้อง save ผ่านปุ่ม "บันทึกพนักงาน" หรือ "บันทึกสิทธิ์" เท่านั้น
   // ใช้ sendBeacon — ส่งได้แม้หน้าจะปิด (ไม่ถูก cancel เหมือน fetch)
   const blob = new Blob([JSON.stringify(DB)], {type:'application/json'});
   navigator.sendBeacon(API_BASE + '/api/data/beacon?token=' + AUTH_TOKEN, blob);
@@ -3659,16 +3645,19 @@ function debouncedEmpSave(){
 async function saveEmployeeConfig(){
   const rows = document.querySelectorAll('#empConfigTable tr');
   const newEmps = [];
+  // สร้าง map จาก email → canView เพื่อ match ที่ถูกต้อง (ไม่ใช้ index)
+  const oldCanViewMap = {};
+  (DB.employees||[]).forEach(e=>{
+    if(e.email) oldCanViewMap[e.email.toLowerCase()] = e.canView || [];
+  });
   rows.forEach(tr=>{
     const name = tr.querySelector('[data-field="name"]')?.value?.trim();
     const email = tr.querySelector('[data-field="email"]')?.value?.trim();
     const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
     const note = tr.querySelector('[data-field="note"]')?.value?.trim();
     const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
-    // คง canView เดิมไว้ (แก้ผ่าน modal)
-    const idx = newEmps.length;
-    const oldEmp = (DB.employees||[])[idx];
-    const canView = oldEmp?.canView || [];
+    // คง canView เดิมไว้ — match by email (ไม่ใช้ index เพราะอาจเลื่อนได้)
+    const canView = email ? (oldCanViewMap[email.toLowerCase()] || []) : [];
     if(name) newEmps.push({name, email, brands, note, isAdmin, canView});
   });
   DB.employees = newEmps;
@@ -3832,21 +3821,46 @@ function addAPMTask(){
     status:'not_started', startDate:'', due:'', note:''
   });
   renderAPM();
+  apmAutoSave(); // auto-save ทันทีที่เพิ่ม task ใหม่
 }
 
 function deleteAPMTask(id){
   DB.apmTasks = (DB.apmTasks||[]).filter(t=>t.id!==id);
   renderAPM();
+  apmAutoSave(); // auto-save ทันทีที่ลบ task
 }
 
+let _apmSaveTimer = null;
 function apmUpdate(id, field, value){
   const task = (DB.apmTasks||[]).find(t=>t.id===id);
   if(task) task[field]=value;
+  // Auto-save debounce 1.5 วินาที หลังแก้ field สุดท้าย
+  apmAutoSave();
 }
 
-async function saveAPM(){
-  await saveDB();
-  showToast('✅ บันทึก APM Task แล้ว!');
+function apmAutoSave(){
+  if(_apmSaveTimer) clearTimeout(_apmSaveTimer);
+  _apmSaveTimer = setTimeout(()=>{ saveAPM(true); }, 1500);
+}
+
+async function saveAPM(silent){
+  if(IS_API){
+    try {
+      if(!silent) setSaveStatus('saving','⏳ กำลังบันทึก...');
+      const resp = await apiFetch(API_BASE + '/api/apm', {
+        method: 'PUT',
+        body: JSON.stringify({apmTasks: DB.apmTasks||[]})
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      if(!silent){ setSaveStatus('ok','✅ บันทึกแล้ว'); showToast('✅ บันทึก APM Task แล้ว!'); }
+    } catch(e){
+      console.error('saveAPM error:', e);
+      if(!silent){ setSaveStatus('err','❌ บันทึกไม่ได้'); }
+    }
+  } else {
+    await saveDB();
+    if(!silent) showToast('✅ บันทึก APM Task แล้ว!');
+  }
 }
 
 function renderAPMSummary(tasks){

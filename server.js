@@ -461,7 +461,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
       sp:           sp.rows.map(rowToCamel),
       lz:           lz.rows.map(rowToCamel),
       apmTasks:     apmTasks.rows.map(rowToCamel),
-      auditLog:     auditLog.rows.map(rowToCamel),
+      auditLog:     auditLog.rows.map(function(r){ var e = rowToCamel(r); e.user = e.userName || e.user || ''; return e; }),
       forecastGMV:  forecastGMV,
       forecastPlatforms: forecastPlatforms,
       brandPlatMap: brandPlatMap,
@@ -512,49 +512,10 @@ app.post('/api/data/beacon', async (req, res) => {
       console.error('[BEACON] config save error:', eCfg.message);
     }
 
-    // === 2) Platform data + brands + employees — in transaction (can fail independently) ===
-    var client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      // Platform data first (FK)
-      for (var plat of ['tt', 'sp', 'lz']) {
-        var table = TABLE_MAP[plat];
-        await client.query('DELETE FROM ' + table);
-      }
-      // Brands — ไม่ save ผ่าน beacon แล้ว (ใช้ PUT /api/brands แทน เพื่อป้องกัน stale overwrite)
-      // Employees
-      if (Array.isArray(db.employees)) {
-        var existingEmps = await client.query('SELECT id, email FROM employees');
-        var empMap = {};
-        existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
-        for (var emp of db.employees) {
-          var empKey = (emp.email||'').toLowerCase();
-          var exEmp = empMap[empKey];
-          if(exEmp) {
-            var canViewStr = Array.isArray(emp.canView) ? emp.canView.join(',') : (emp.canView||'');
-            await client.query('UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6', [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, canViewStr, exEmp.id]);
-          }
-        }
-      }
-      // Platform data re-insert
-      for (var plat of ['tt', 'sp', 'lz']) {
-        if (!Array.isArray(db[plat])) continue;
-        var table = TABLE_MAP[plat];
-        var cols = PLAT_COLS[plat];
-        var ph = makePH(cols.length);
-        for (var row of db[plat]) {
-          var snake = rowToSnake(row);
-          var vals = cols.map(function(c){ return cleanVal(c, snake[c]); });
-          await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
-        }
-      }
-      await client.query('COMMIT');
-    } catch(e2) {
-      await client.query('ROLLBACK');
-      console.error('[BEACON] data save error:', e2.message);
-    } finally {
-      client.release();
-    }
+    // === 2) ไม่ save employees + platform data ผ่าน beacon ===
+    // beacon ส่งข้อมูลเก่า (stale) จาก client ที่ปิดหน้า → ทับค่าที่ user อื่น save ไว้
+    // Employee = ผ่านปุ่ม "บันทึกพนักงาน" / "บันทึกสิทธิ์" เท่านั้น
+    // Platform data = ผ่านปุ่ม "บันทึก" เท่านั้น
     res.json({ ok: true });
   } catch(e) {
     console.error('beacon auth error:', e.message);
@@ -708,11 +669,13 @@ app.put('/api/data', requireAuth, async (req, res) => {
     }
 
     // --- Re-insert platform data ---
+    var platCounts = {};
     for (const plat of ['tt', 'sp', 'lz']) {
-      if (!Array.isArray(db[plat])) continue;
+      if (!Array.isArray(db[plat])) { platCounts[plat] = 'SKIP(not array)'; continue; }
       const table = TABLE_MAP[plat];
       const cols  = PLAT_COLS[plat];
       const ph    = makePH(cols.length);
+      platCounts[plat] = 0;
       for (const row of db[plat]) {
         const snake = rowToSnake(row);
         const vals  = cols.map(c => cleanVal(c, snake[c]));
@@ -720,6 +683,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
           'INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')',
           vals
         );
+        platCounts[plat]++;
       }
     }
 
@@ -761,10 +725,11 @@ app.put('/api/data', requireAuth, async (req, res) => {
     }
 
     await client.query('COMMIT');
+    console.log('[SAVE] COMMIT OK — tt:', platCounts.tt, '| sp:', platCounts.sp, '| lz:', platCounts.lz, '| by:', req.headers['x-user']||'unknown');
     res.json({ success: true, savedBy: req.headers['x-user'] || '' });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('PUT /api/data error:', err);
+    console.error('[SAVE] ROLLBACK!!! error:', err.message, '— tt:', platCounts.tt, '| sp:', platCounts.sp, '| lz:', platCounts.lz);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -920,6 +885,33 @@ app.put('/api/employees', requireAuth, async (req, res) => {
       client.release();
     }
   });
+});
+
+// ============================================================
+// PUT /api/apm — dedicated APM tasks save (auto-save จาก client)
+// ============================================================
+app.put('/api/apm', requireAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    var tasks = req.body.apmTasks || [];
+    await client.query('BEGIN');
+    await client.query('DELETE FROM apm_tasks');
+    for (var t of tasks) {
+      await client.query(
+        'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [t.month||'', t.employee||'', t.brand||'', t.task||'', t.detail||'',
+         t.status||'not_started', t.startDate||null, t.due||null, t.note||'']
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[APM SAVE] error:', err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ============================================================
@@ -1294,67 +1286,78 @@ app.get('/api/line/schedule', async (req, res) => {
     function mkClr(p){ return p<=mkTarget?'#00C853':'#FF5252'; }
     function roasClr(v){ return v>=roasTarget?'#00C853':'#FFC107'; }
     function fcClr(p){ return p>=100?'#00C853':p>=70?'#4CAF50':p>=40?'#FFC107':'#FF5252'; }
-    function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:'#AAAAAA',flex:3},{type:'text',text:val,size:'sm',color:color||'#FFFFFF',weight:'bold',align:'end',flex:4}]}; }
+    function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:'#888888',flex:3},{type:'text',text:val,size:'sm',color:color||'#333333',weight:'bold',align:'end',flex:4}]}; }
 
     // Progress bar helper
     function makeBar(pct,color){
       var filled = Math.min(10,Math.round(Math.min(100,pct)/10));
       var boxes = [];
-      for(var bi=0;bi<10;bi++) boxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:bi<filled?(color||'#00C853'):'#444444',cornerRadius:'2px'});
+      for(var bi=0;bi<10;bi++) boxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:bi<filled?(color||'#2E7D32'):'#E0E0E0',cornerRadius:'2px'});
       return {type:'box',layout:'horizontal',spacing:'xs',margin:'sm',contents:boxes};
     }
 
     // Platform rows for flex
-    var pColors = {tt:'#FF5252',sp:'#FF9800',lz:'#B388FF'};
+    var pColors = {tt:'#E53935',sp:'#FF6F00',lz:'#1565C0'};
     var platFlexRows = fcPlat.map(function(pl){
       var tg = ((todayData.byPlat[pl.k])||{}).gmv||0;
       var mg = ((monthData.byPlat[pl.k])||{}).gmv||0;
       return {type:'box',layout:'horizontal',contents:[
-        {type:'text',text:pl.label,size:'sm',color:pColors[pl.k]||'#AAAAAA',flex:2},
-        {type:'text',text:'฿'+fmtN(tg),size:'sm',color:'#FFFFFF',align:'end',flex:3},
-        {type:'text',text:'฿'+fmtN(mg),size:'sm',color:'#AAAAAA',align:'end',flex:3}
+        {type:'text',text:pl.label,size:'sm',color:pColors[pl.k]||'#888888',weight:'bold',flex:2},
+        {type:'text',text:'฿'+fmtN(tg),size:'sm',color:'#333333',align:'end',flex:3},
+        {type:'text',text:'฿'+fmtN(mg),size:'sm',color:'#888888',align:'end',flex:3}
       ],margin:'sm'};
     });
 
     var sumFlex = {
       type:'bubble',size:'mega',
-      styles:{header:{backgroundColor:'#1A237E'},body:{backgroundColor:'#1B1B1B'}},
       header:{type:'box',layout:'vertical',contents:[
-        {type:'text',text:'📊 JLC ALL ONLINE Daily Report',size:'lg',weight:'bold',color:'#FFFFFF'},
-        {type:'text',text:dateLabel,size:'sm',color:'#B0BEC5',margin:'xs'}
-      ],paddingAll:'16px'},
-      body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'16px',contents:[
-        {type:'text',text:'📅 ยอดวันนี้',weight:'bold',color:'#00C853',size:'sm'},
+        {type:'box',layout:'horizontal',contents:[
+          {type:'text',text:'📊',size:'xxl',flex:0},
+          {type:'box',layout:'vertical',contents:[
+            {type:'text',text:'JLC ALL ONLINE',size:'lg',weight:'bold',color:'#FFFFFF'},
+            {type:'text',text:'Daily Report — '+dateLabel,size:'xs',color:'#B8E6C8'}
+          ],paddingStart:'md'}
+        ],alignItems:'center'}
+      ],background:{type:'linearGradient',angle:'135deg',startColor:'#1B5E20',endColor:'#388E3C'},paddingAll:'20px'},
+      body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'20px',backgroundColor:'#FFFFFF',contents:[
+        {type:'text',text:'ยอดวันนี้',weight:'bold',color:'#1B5E20',size:'sm'},
         {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
           hRow('GMV','฿'+fmtN(todayData.gmv)),
           hRow('Ads','฿'+fmtN(todayData.ads)), hRow('MK%',todayMkPct.toFixed(1)+'%',mkClr(todayMkPct)),
           hRow('ROAS',todayRoas.toFixed(1)+'x',roasClr(todayRoas))
         ]},
-        {type:'separator',color:'#444444'},
-        {type:'text',text:'📆 สะสมเดือน '+monthName+' ('+daysPassed+' วัน)',weight:'bold',color:'#42A5F5',size:'sm'},
+        {type:'separator',color:'#E0E0E0'},
+        {type:'text',text:'สะสมเดือน '+monthName+' ('+daysPassed+' วัน)',weight:'bold',color:'#1565C0',size:'sm'},
         {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
-          hRow('GMV สะสม','฿'+fmtN(monthData.gmv)), hRow('เฉลี่ย/วัน','฿'+fmtN(Math.round(monthAvg)),'#42A5F5'),
+          hRow('GMV สะสม','฿'+fmtN(monthData.gmv)), hRow('เฉลี่ย/วัน','฿'+fmtN(Math.round(monthAvg)),'#1565C0'),
           hRow('Ads สะสม','฿'+fmtN(monthData.ads)),
           hRow('MK%',monthMkPct.toFixed(1)+'%',mkClr(monthMkPct))
         ]},
-        {type:'separator',color:'#444444'},
-        {type:'text',text:'🎯 เป้า FC: ฿'+fmtN(fcTarget),weight:'bold',color:'#FFC107',size:'sm'},
+        {type:'separator',color:'#E0E0E0'},
+        {type:'text',text:'FC: ฿'+fmtN(fcTarget),weight:'bold',color:'#E65100',size:'sm'},
         makeBar(fcPct),
         {type:'box',layout:'horizontal',margin:'xs',contents:[
-          {type:'text',text:'ทำได้ '+fcPct.toFixed(1)+'%',size:'xs',color:fcClr(fcPct)},
-          {type:'text',text:'ขาด ฿'+fmtN(Math.round(fcGap)),size:'xs',color:'#FF5252',align:'end'}
+          {type:'text',text:'ทำได้ '+fcPct.toFixed(1)+'%',size:'xs',color:fcClr(fcPct),weight:'bold'},
+          {type:'text',text:'ขาด ฿'+fmtN(Math.round(fcGap)),size:'xs',color:'#E53935',align:'end'}
         ]},
-        {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmtN(Math.round(fcDailyNeed))+' (เหลือ '+daysRemain+' วัน)',size:'xs',color:'#AAAAAA',margin:'xs'},
-        {type:'separator',color:'#444444'},
+        {type:'text',text:'ต้องทำ/วัน ฿'+fmtN(Math.round(fcDailyNeed))+' (เหลือ '+daysRemain+' วัน)',size:'xs',color:'#888888',margin:'xs'},
+        {type:'separator',color:'#E0E0E0'},
         {type:'box',layout:'horizontal',contents:[
-          {type:'text',text:'ช่องทาง',size:'xs',color:'#AAAAAA',flex:2},
-          {type:'text',text:'วันนี้',size:'xs',color:'#AAAAAA',align:'end',flex:3},
-          {type:'text',text:'เดือน',size:'xs',color:'#AAAAAA',align:'end',flex:3}
+          {type:'text',text:'ช่องทาง',size:'xs',color:'#888888',flex:2},
+          {type:'text',text:'วันนี้',size:'xs',color:'#888888',align:'end',flex:3},
+          {type:'text',text:'เดือน',size:'xs',color:'#888888',align:'end',flex:3}
         ]}
       ].concat(platFlexRows).concat([
-        {type:'separator',color:'#444444'},
-        {type:'text',text:motivation,size:'sm',color:'#00C853',wrap:true,align:'center',margin:'sm'}
-      ])}
+        {type:'separator',color:'#E0E0E0'},
+        {type:'box',layout:'vertical',contents:[
+          {type:'text',text:motivation,size:'sm',color:'#FFFFFF',align:'center',weight:'bold',wrap:true}
+        ],background:{type:'linearGradient',angle:'90deg',startColor:'#2E7D32',endColor:'#43A047'},cornerRadius:'lg',paddingAll:'md',margin:'md'}
+      ])},
+      footer:{type:'box',layout:'vertical',contents:[{
+        type:'button',action:{type:'uri',label:'📊 เปิด Dashboard',uri:'https://ecom-dashboard.wejlc.com'},
+        style:'primary',color:'#1B5E20',height:'sm'
+      }],paddingAll:'16px',backgroundColor:'#F1F8E9'},
+      styles:{header:{separator:false},footer:{separator:false}}
     };
 
     // Brand Flex — Carousel (1 bubble per brand)
@@ -1380,28 +1383,28 @@ app.get('/api/line/schedule', async (req, res) => {
 
       brandBubbles.push({
         type:'bubble',size:'kilo',
-        styles:{header:{backgroundColor:hClr},body:{backgroundColor:'#1B1B1B'}},
         header:{type:'box',layout:'vertical',contents:[
           {type:'text',text:icon+' '+b,size:'lg',weight:'bold',color:'#FFFFFF'},
-          {type:'text',text:dateLabel,size:'xs',color:'#B0BEC5',margin:'xs'}
-        ],paddingAll:'14px'},
-        body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',contents:[
-          {type:'text',text:'📅 วันนี้',weight:'bold',color:'#00C853',size:'xs'},
+          {type:'text',text:dateLabel,size:'xs',color:'#FFFFFFAA',margin:'xs'}
+        ],paddingAll:'14px',backgroundColor:hClr},
+        body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',backgroundColor:'#FFFFFF',contents:[
+          {type:'text',text:'วันนี้',weight:'bold',color:'#1B5E20',size:'xs'},
           hRow('GMV','฿'+fmtN(bTG)),
-          {type:'separator',color:'#444444'},
-          {type:'text',text:'📆 เดือน '+monthName,weight:'bold',color:'#42A5F5',size:'xs'},
+          {type:'separator',color:'#E0E0E0'},
+          {type:'text',text:'เดือน '+monthName,weight:'bold',color:'#1565C0',size:'xs'},
           hRow('GMV สะสม','฿'+fmtN(bGmv)),
           hRow('Ads','฿'+fmtN(bAds)), hRow('MK%',bMk.toFixed(1)+'%',mkClr(bMk)),
-          hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=roasTarget?'#00C853':'#FFC107'),
-          {type:'separator',color:'#444444'},
-          {type:'text',text:'🎯 FC: ฿'+fmtN(bFT),weight:'bold',color:'#FFC107',size:'xs'},
+          hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=roasTarget?'#2E7D32':'#E65100'),
+          {type:'separator',color:'#E0E0E0'},
+          {type:'text',text:'FC: ฿'+fmtN(bFT),weight:'bold',color:'#E65100',size:'xs'},
           makeBar(bFP,fcClr(bFP)),
           {type:'box',layout:'horizontal',contents:[
             {type:'text',text:bFP.toFixed(1)+'%',size:'xs',color:fcClr(bFP),weight:'bold'},
-            {type:'text',text:'ขาด ฿'+fmtN(bFG),size:'xs',color:'#FF5252',align:'end'}
+            {type:'text',text:'ขาด ฿'+fmtN(bFG),size:'xs',color:'#E53935',align:'end'}
           ]},
-          {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmtN(Math.round(bDailyNeed)),size:'xs',color:'#AAAAAA'}
-        ]}
+          {type:'text',text:'ต้องทำ/วัน ฿'+fmtN(Math.round(bDailyNeed)),size:'xs',color:'#888888'}
+        ]},
+        styles:{header:{separator:false}}
       });
     });
 
@@ -1553,6 +1556,7 @@ app.post('/api/line/send-report', async (req, res) => {
 
     var token = schedResp.lineToken;
     var groupId = schedResp.lineGroup;
+    console.log('[LINE] token:', token ? (token.substring(0,8)+'...') : 'EMPTY', '| group:', groupId ? (groupId.substring(0,8)+'...') : 'EMPTY');
     if (!token) return res.status(400).json({ error: 'LINE token not configured — ใส่ใน Config tab' });
     if (!groupId) return res.status(400).json({ error: 'LINE group ID not configured — ใส่ใน Config tab' });
 
@@ -1637,7 +1641,7 @@ app.post('/api/line/send-report', async (req, res) => {
       } else { continue; }
 
       var result = await pushLine(lineMsg);
-      console.log('[LINE] sent', item.id, '→', result.status);
+      console.log('[LINE] sent', item.id, '→', result.status, result.status!==200?result.body:'');
       if (result.status === 200) sentLog[item.id] = todayStr;
       results.push({ id: item.id, name: item.name, status: result.status });
       await new Promise(function(r) { setTimeout(r, 500); });
@@ -1684,7 +1688,7 @@ app.post('/api/line/send-report', async (req, res) => {
         styles:{header:{separator:false},footer:{separator:false}}
       };
       var reminderResult = await pushLine({ type:'flex', altText:'📋 '+rt+' — สรุปงานก่อนกลับบ้าน', contents:reminderFlex });
-      console.log('[LINE] reminder →', reminderResult.status);
+      console.log('[LINE] reminder →', reminderResult.status, reminderResult.status!==200?reminderResult.body:'');
       if (reminderResult.status === 200) sentLog['team_reminder'] = todayStr;
       results.push({ id: 'team_reminder', name: 'Team Reminder', status: reminderResult.status });
     } else {
@@ -1920,12 +1924,15 @@ app.listen(PORT, function() {
       resp.on('end', function(){
         try {
           var r = JSON.parse(body);
-          if(r.results && r.results.length > 0) console.log('[AUTO-LINE] sent:', r.results.map(function(x){ return x.id+'→'+x.status; }).join(', '));
+          if(r.error) console.error('[AUTO-LINE] ERROR:', r.error);
+          if(r.sent && r.sent.length > 0) console.log('[AUTO-LINE] sent:', r.sent.map(function(x){ return x.id+'→'+x.status; }).join(', '));
           if(r.skipped && r.skipped.length > 0) {
             var notYet = r.skipped.filter(function(x){ return x.reason==='not_yet'; });
             if(notYet.length > 0) console.log('[AUTO-LINE] waiting:', notYet.map(function(x){ return x.id+'@'+x.sendTime; }).join(', '));
+            var alreadySent = r.skipped.filter(function(x){ return x.reason==='already_sent_today'; });
+            if(alreadySent.length > 0) console.log('[AUTO-LINE] already sent today:', alreadySent.map(function(x){ return x.id; }).join(', '));
           }
-        } catch(e){}
+        } catch(e){ console.error('[AUTO-LINE] parse error:', e.message, body.substring(0,200)); }
       });
     });
     postReq.on('error', function(e){ /* server not ready yet */ });
