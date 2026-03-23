@@ -17,12 +17,15 @@ const SERVER_VERSION = '2026-03-22-v2'; // ใช้เช็คว่า server
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// ป้องกัน browser cache index.html — ให้โหลด code ใหม่ทุกครั้ง
+// ป้องกัน browser + CDN cache — ให้โหลด code ใหม่ทุกครั้ง
 app.use((req, res, next) => {
-  if (req.path === '/' || req.path.endsWith('.html')) {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  if (req.path === '/' || req.path.endsWith('.html') || req.path.endsWith('.js') || req.path.endsWith('.css')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    res.set('CDN-Cache-Control', 'no-store');
+    res.set('ETag', SERVER_VERSION + '-' + Date.now());
   }
   next();
 });
