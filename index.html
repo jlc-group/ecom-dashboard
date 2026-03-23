@@ -785,7 +785,7 @@ input[type=number]{-moz-appearance:textfield;}
         <div class="card-title" style="margin:0;">📊 Summary Report (Flex Card)</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-          <input id="lineSumTime" type="time" class="cell" value="09:00" onchange="DB.lineSumSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+          <input id="lineSumTime" type="time" class="cell" value="09:00" oninput="DB.lineSumSendTime=this.value;" onchange="DB.lineSumSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
         </div>
       </div>
       <div style="display:flex;justify-content:center;">
@@ -802,7 +802,7 @@ input[type=number]{-moz-appearance:textfield;}
         <div class="card-title" style="margin:0;">🏷️ Brand Report (แต่ละแบรนด์)</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-          <input id="lineBrandTime" type="time" class="cell" value="09:00" onchange="DB.lineBrandSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+          <input id="lineBrandTime" type="time" class="cell" value="09:00" oninput="DB.lineBrandSendTime=this.value;" onchange="DB.lineBrandSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
         </div>
       </div>
       <div id="lineBrandMsg" style="display:flex;flex-direction:column;gap:16px;padding:8px 0;max-width:400px;margin:0 auto;"></div>
@@ -818,7 +818,7 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="card-title" style="margin:0;">💚 ข้อความเตือนทีม (Daily Reminder)</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-size:11px;color:var(--muted);">⏰ ส่งเวลา</span>
-        <input id="lineReminderTime" type="time" class="cell" value="17:00" onchange="DB.lineReminderSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
+        <input id="lineReminderTime" type="time" class="cell" value="17:00" oninput="DB.lineReminderSendTime=this.value;" onchange="DB.lineReminderSendTime=this.value;saveDB();" style="width:90px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);padding:4px 8px;">
       </div>
     </div>
     <div style="color:var(--muted);font-size:11px;margin-bottom:10px;">
@@ -1598,6 +1598,14 @@ function saveOnLeave(){
     const tbody=document.getElementById('tbody-'+plat);
     if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
   });
+  // Sync LINE config from DOM
+  const _lt=document.getElementById('lineToken'); if(_lt) DB.lineToken=_lt.value||'';
+  const _lg=document.getElementById('lineGroup'); if(_lg) DB.lineGroup=_lg.value||'';
+  const _st=document.getElementById('lineSumTime'); if(_st) DB.lineSumSendTime=_st.value||'';
+  const _bt=document.getElementById('lineBrandTime'); if(_bt) DB.lineBrandSendTime=_bt.value||'';
+  const _rt=document.getElementById('lineReminderTime'); if(_rt) DB.lineReminderSendTime=_rt.value||'17:00';
+  const _ss=document.getElementById('lineSendSummary'); if(_ss) DB.lineSendSummary=_ss.value||'YES';
+  const _sb=document.getElementById('lineSendBrand'); if(_sb) DB.lineSendBrand=_sb.value||'YES';
   // Sync employee data from DOM
   const empTbody = document.getElementById('empConfigTable');
   if(empTbody && empTbody.children.length > 0){
