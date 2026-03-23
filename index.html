@@ -1885,23 +1885,25 @@ function syncTableToDB(plat){
   const tbody = document.getElementById('tbody-'+plat);
   if(!tbody || !tbody.querySelector('tr[data-row]')) return;
 
-  const currentBrand = document.getElementById('selBrand').value;
-  const currentMonth = document.getElementById('selMonth').value;
-
-  // ถ้าเลือก "ทุกแบรนด์" จะไม่มี data rows (แสดงแค่ warning) → ไม่ต้อง sync
-  if(currentBrand === 'all') return;
-
-  // อ่าน rows จาก DOM (เฉพาะ brand+month ที่กำลังแสดง)
+  // อ่าน rows จาก DOM (ของหน้าจอที่กำลังแสดงอยู่จริงๆ)
   const visibleRows = getTableRows(plat);
+  if(visibleRows.length === 0) return;
+
+  // หา brand และ month ที่ DOM กำลังกางโชว์อยู่ (ไม่ใช่จาก Dropdown เพราะบน Dropdown ค่าอาจจะเปลี่ยนล่วงหน้าไปแล้วจาก event change!)
+  const domBrand = visibleRows[0].brand || document.getElementById('selBrand').value;
+  const domMonthStr = visibleRows[0].date ? visibleRows[0].date.substring(0,7) : '';
+
+  // ถ้าบอกว่า 'ทุกแบรนด์' ไม่ให้เก็บบันทึกทับแยกแบรนด์
+  if(!domBrand || domBrand === 'all') return;
 
   // เก็บ rows จาก DB ที่ไม่ได้แสดงอยู่ (brand อื่น หรือ month อื่น)
   const kept = (DB[plat]||[]).filter(r => {
     // เก็บ rows ของ brand อื่น
-    if(r.brand && r.brand !== currentBrand) return true;
+    if(r.brand && r.brand !== domBrand) return true;
     // เก็บ rows ของ month อื่น
-    if(currentMonth && currentMonth !== 'all' && r.date){
-      const rowMonth = r.date.substring(0,7);
-      if(rowMonth !== currentMonth) return true;
+    if(domMonthStr && r.date){
+      const rowMonth = String(r.date).substring(0,7);
+      if(rowMonth !== domMonthStr) return true;
     }
     return false; // row นี้ตรงกับ brand+month ที่แสดง → จะถูกแทนที่ด้วย visibleRows
   });
