@@ -414,7 +414,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
       pool.query("SELECT *, TO_CHAR(date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') as date_str FROM daily_tiktok ORDER BY date DESC, brand"),
       pool.query("SELECT *, TO_CHAR(date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') as date_str FROM daily_shopee ORDER BY date DESC, brand"),
       pool.query("SELECT *, TO_CHAR(date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') as date_str FROM daily_lazada ORDER BY date DESC, brand"),
-      pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
+      pool.query("SELECT id, month, employee, brand, task, detail, status, TO_CHAR(start_date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') as start_date_str, TO_CHAR(due_date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') as due_date_str, note FROM apm_tasks ORDER BY id DESC"),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
       pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index'),
       pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','line_reminder_send_time','reminder_template','forecast_platforms','brand_plat_map','line_templates','line_custom_msgs','line_send_summary','line_send_brand')"),
@@ -460,7 +460,12 @@ app.get('/api/data', requireAuth, async (req, res) => {
       tt:           tt.rows.map(function(r){ var o=rowToCamel(r); if(o.dateStr) o.date = o.dateStr; return o; }),
       sp:           sp.rows.map(function(r){ var o=rowToCamel(r); if(o.dateStr) o.date = o.dateStr; return o; }),
       lz:           lz.rows.map(function(r){ var o=rowToCamel(r); if(o.dateStr) o.date = o.dateStr; return o; }),
-      apmTasks:     apmTasks.rows.map(rowToCamel),
+      apmTasks:     apmTasks.rows.map(function(r){
+        var o = rowToCamel(r);
+        if(o.startDateStr) o.startDate = o.startDateStr;
+        if(o.dueDateStr) o.dueDate = o.dueDateStr;
+        return o;
+      }),
       auditLog:     auditLog.rows.map(function(r){ var e = rowToCamel(r); e.user = e.userName || e.user || ''; return e; }),
       forecastGMV:  forecastGMV,
       forecastPlatforms: forecastPlatforms,
@@ -963,7 +968,7 @@ app.put('/api/apm', requireAuth, async (req, res) => {
       await client.query(
         'INSERT INTO apm_tasks (month, employee, brand, task, detail, status, start_date, due_date, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
         [t.month||'', t.employee||'', t.brand||'', t.task||'', t.detail||'',
-         t.status||'not_started', t.startDate||null, t.due||null, t.note||'']
+         t.status||'not_started', t.startDate||null, t.dueDate||t.due||null, t.note||'']
       );
     }
     await client.query('COMMIT');

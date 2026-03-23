@@ -3963,7 +3963,7 @@ function addAPMTask(){
 }
 
 function deleteAPMTask(id){
-  DB.apmTasks = (DB.apmTasks||[]).filter(t=>t.id!==id);
+  DB.apmTasks = (DB.apmTasks||[]).filter(t=>String(t.id)!==String(id));
   renderAPM();
   apmAutoSave(); // auto-save ทันทีที่ลบ task
 }
@@ -4141,7 +4141,7 @@ function renderAPM(){
       <td><input class="cell left" type="text" value="${(task.detail||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'detail',this.value)" placeholder="รายละเอียดงาน..." style="min-width:200px"></td>
       <td><select class="cell left ${sCls}" onchange="apmUpdate(${tid},'status',this.value);this.className='cell left '+(APM_STATUS.find(s=>s.v===this.value)||APM_STATUS[0]).cls;refreshAPMSummary()" style="min-width:125px">${statOpts}</select></td>
       <td><input class="cell" type="text" readonly data-datepicker="true" value="${task.startDate||''}" onclick="openDatePicker(this)" onchange="apmUpdate(${tid},'startDate',this.value)" style="min-width:110px;cursor:pointer;" placeholder="เลือกวัน"></td>
-      <td><input class="cell" type="text" readonly data-datepicker="true" value="${task.due||''}" onclick="openDatePicker(this)" onchange="apmUpdate(${tid},'due',this.value)" style="min-width:110px;cursor:pointer;" placeholder="เลือกวัน"></td>
+      <td><input class="cell" type="text" readonly data-datepicker="true" value="${task.dueDate||task.due||''}" onclick="openDatePicker(this)" onchange="apmUpdate(${tid},'dueDate',this.value)" style="min-width:110px;cursor:pointer;" placeholder="เลือกวัน"></td>
       <td><input class="cell left" type="text" value="${(task.note||'').replace(/"/g,'&quot;')}" onchange="apmUpdate(${tid},'note',this.value)" placeholder="หมายเหตุ..." style="min-width:180px"></td>
       <td style="padding:4px 6px;"><button class="btn btn-danger btn-sm" onclick="deleteAPMTask(${tid})">✕</button></td>
     </tr>`;
