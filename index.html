@@ -2568,55 +2568,56 @@ var FLEX_BRAND_JSON = null;
 
 // ── Build Flex Message: Summary Report ──
 function buildFlexSummary(rd){
-  const accentGreen = '#00C853';
-  const accentRed = '#FF5252';
-  const warn = '#FFC107';
-  const muted = '#AAAAAA';
+  const accentGreen = '#1B5E20';
+  const accentRed = '#E53935';
+  const warn = '#F57F17';
+  const muted = '#888888';
+  const darkText = '#333333';
   const white = '#FFFFFF';
-  const bgDark = '#1B1B1B';
-  const bgCard = '#2D2D2D';
+  const bgWhite = '#FFFFFF';
+  const separator = '#E0E0E0';
 
-  function mkColor(pct){ return pct<=MK_TARGET ? accentGreen : accentRed; }
-  function roasColor(v){ return v>=ROAS_TARGET ? accentGreen : warn; }
-  function fcColor(pct){ return pct>=100?accentGreen:pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
+  function mkColor(pct){ return pct<=MK_TARGET ? '#388E3C' : accentRed; }
+  function roasColor(v){ return v>=ROAS_TARGET ? '#388E3C' : warn; }
+  function fcColor(pct){ return pct>=100?'#388E3C':pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
 
   // Progress bar boxes
   const barFilled = Math.min(10, Math.round(Math.min(100,rd.fcPct)/10));
   const barBoxes = [];
   for(let i=0;i<10;i++){
-    barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?accentGreen:'#444444',cornerRadius:'2px'});
+    barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?'#388E3C':separator,cornerRadius:'2px'});
   }
 
   // Platform rows
-  const platColors = {tt:accentRed,sp:'#FF9800',lz:'#B388FF'};
+  const platColors = {tt:'#E53935',sp:'#FF6F00',lz:'#1565C0'};
   const platRows = FC_PLAT.map(pl=>{
     const tg = rd.todayData.byPlat[pl.k]?.gmv||0;
     const mg = rd.monthData.byPlat[pl.k]?.gmv||0;
     return {type:'box',layout:'horizontal',contents:[
       {type:'text',text:pl.label,size:'sm',color:platColors[pl.k]||muted,flex:2},
-      {type:'text',text:'฿'+fmt(tg),size:'sm',color:white,align:'end',flex:3},
+      {type:'text',text:'฿'+fmt(tg),size:'sm',color:darkText,weight:'bold',align:'end',flex:3},
       {type:'text',text:'฿'+fmt(mg),size:'sm',color:muted,align:'end',flex:3}
     ],margin:'sm'};
   });
 
   const bubble = {
     type:'bubble',size:'mega',
-    styles:{header:{backgroundColor:'#1A237E'},body:{backgroundColor:bgDark},footer:{backgroundColor:bgDark}},
+    styles:{header:{backgroundColor:'#1B5E20'},body:{backgroundColor:bgWhite},footer:{backgroundColor:bgWhite}},
     header:{type:'box',layout:'vertical',contents:[
-      {type:'text',text:'📊 JLC ALL ONLINE Daily Report',size:'lg',weight:'bold',color:white},
-      {type:'text',text:rd.dateLabel,size:'sm',color:'#B0BEC5',margin:'xs'}
-    ],paddingAll:'16px'},
+      {type:'text',text:'JLC ALL ONLINE Daily Report',size:'lg',weight:'bold',color:white},
+      {type:'text',text:rd.dateLabel,size:'sm',color:'#C8E6C9',margin:'xs'}
+    ],paddingAll:'16px',backgroundColor:'#1B5E20'},
     body:{type:'box',layout:'vertical',spacing:'md',paddingAll:'16px',contents:[
       // ── ยอดวันนี้ ──
-      {type:'text',text:'📅 ยอดวันนี้',weight:'bold',color:accentGreen,size:'sm'},
+      {type:'text',text:'ยอดวันนี้',weight:'bold',color:accentGreen,size:'sm'},
       {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'GMV',size:'sm',color:muted,flex:2},
-          {type:'text',text:'฿'+fmt(rd.todayData.gmv),size:'sm',color:white,weight:'bold',align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(rd.todayData.gmv),size:'sm',color:darkText,weight:'bold',align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'Ads',size:'sm',color:muted,flex:2},
-          {type:'text',text:'฿'+fmt(rd.todayData.ads),size:'sm',color:white,align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(rd.todayData.ads),size:'sm',color:darkText,align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'MK%',size:'sm',color:muted,flex:2},
@@ -2627,37 +2628,37 @@ function buildFlexSummary(rd){
           {type:'text',text:rd.todayRoas.toFixed(1)+'x',size:'sm',color:roasColor(rd.todayRoas),weight:'bold',align:'end',flex:4}
         ]},
       ]},
-      {type:'separator',color:'#444444'},
+      {type:'separator',color:separator},
       // ── สะสมเดือน ──
-      {type:'text',text:'📆 สะสมเดือน '+rd.monthName+' ('+rd.daysPassed+' วัน)',weight:'bold',color:'#42A5F5',size:'sm'},
+      {type:'text',text:'สะสมเดือน '+rd.monthName+' ('+rd.daysPassed+' วัน)',weight:'bold',color:'#1565C0',size:'sm'},
       {type:'box',layout:'vertical',spacing:'xs',margin:'sm',contents:[
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'GMV สะสม',size:'sm',color:muted,flex:3},
-          {type:'text',text:'฿'+fmt(rd.monthData.gmv),size:'sm',color:white,weight:'bold',align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(rd.monthData.gmv),size:'sm',color:darkText,weight:'bold',align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'เฉลี่ย/วัน',size:'sm',color:muted,flex:3},
-          {type:'text',text:'฿'+fmt(Math.round(rd.monthAvg)),size:'sm',color:'#42A5F5',weight:'bold',align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(Math.round(rd.monthAvg)),size:'sm',color:'#1565C0',weight:'bold',align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'Ads สะสม',size:'sm',color:muted,flex:3},
-          {type:'text',text:'฿'+fmt(rd.monthData.ads),size:'sm',color:white,align:'end',flex:4}
+          {type:'text',text:'฿'+fmt(rd.monthData.ads),size:'sm',color:darkText,align:'end',flex:4}
         ]},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'MK%',size:'sm',color:muted,flex:3},
           {type:'text',text:rd.monthMkPct.toFixed(1)+'%',size:'sm',color:mkColor(rd.monthMkPct),weight:'bold',align:'end',flex:4}
         ]},
       ]},
-      {type:'separator',color:'#444444'},
+      {type:'separator',color:separator},
       // ── FC Target ──
-      {type:'text',text:'🎯 เป้า FC: ฿'+fmt(rd.fcTarget),weight:'bold',color:warn,size:'sm'},
+      {type:'text',text:'เป้า FC: ฿'+fmt(rd.fcTarget),weight:'bold',color:warn,size:'sm'},
       {type:'box',layout:'horizontal',spacing:'xs',margin:'sm',contents:barBoxes},
       {type:'box',layout:'horizontal',margin:'xs',contents:[
         {type:'text',text:'ทำได้ '+rd.fcPct.toFixed(1)+'%',size:'xs',color:fcColor(rd.fcPct)},
         {type:'text',text:'ขาด ฿'+fmt(Math.round(rd.fcGap)),size:'xs',color:accentRed,align:'end'}
       ]},
-      {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmt(Math.round(rd.fcDailyNeed))+' (เหลือ '+rd.daysRemain+' วัน)',size:'xs',color:muted,margin:'xs'},
-      {type:'separator',color:'#444444'},
+      {type:'text',text:'ต้องทำ/วัน ฿'+fmt(Math.round(rd.fcDailyNeed))+' (เหลือ '+rd.daysRemain+' วัน)',size:'xs',color:muted,margin:'xs'},
+      {type:'separator',color:separator},
       // ── Per Platform ──
       {type:'box',layout:'horizontal',contents:[
         {type:'text',text:'ช่องทาง',size:'xs',color:muted,flex:2},
@@ -2665,8 +2666,10 @@ function buildFlexSummary(rd){
         {type:'text',text:'เดือน',size:'xs',color:muted,align:'end',flex:3}
       ]},
     ].concat(platRows).concat([
-      {type:'separator',color:'#444444'},
-      {type:'text',text:rd.motivation,size:'sm',color:accentGreen,wrap:true,align:'center',margin:'sm'}
+      {type:'separator',color:separator},
+      {type:'box',layout:'vertical',backgroundColor:'#E8F5E9',cornerRadius:'8px',paddingAll:'10px',margin:'sm',contents:[
+        {type:'text',text:rd.motivation,size:'sm',color:'#2E7D32',wrap:true,align:'center'}
+      ]}
     ])}
   };
 
@@ -2677,7 +2680,7 @@ function buildFlexSummary(rd){
       return {type:'text',text:line,size:'xs',color:accentRed,wrap:true};
     });
     bubble.body.contents.splice(-2, 0, ...warningContents);
-    bubble.body.contents.splice(-2, 0, {type:'separator',color:'#444444'});
+    bubble.body.contents.splice(-2, 0, {type:'separator',color:separator});
   }
 
   return bubble;
@@ -2686,19 +2689,21 @@ function buildFlexSummary(rd){
 // ── Build Flex Message: Per-Brand Report ──
 // ── Build Flex Carousel: 1 bubble per brand ──
 function buildFlexBrandCarousel(rd){
-  const accentGreen = '#00C853';
-  const accentRed = '#FF5252';
-  const warn = '#FFC107';
-  const muted = '#AAAAAA';
+  const accentGreen = '#1B5E20';
+  const accentRed = '#E53935';
+  const warn = '#F57F17';
+  const muted = '#888888';
+  const darkText = '#333333';
   const white = '#FFFFFF';
+  const separator = '#E0E0E0';
 
   // Brand-specific header colors
-  const brandHeaderColors = {"jh-ecom":'#1B5E20','jarvit':'#E91E63','j-dent':'#388E3C'};
-  const defaultHeaderColors = ['#4A148C','#1A237E','#004D40','#BF360C','#1B5E20','#F57F17'];
+  const brandHeaderColors = {"jh-ecom":'#1B5E20','jarvit':'#AD1457','j-dent':'#388E3C'};
+  const defaultHeaderColors = ['#4A148C','#1565C0','#004D40','#BF360C','#1B5E20','#E65100'];
 
-  function mkColor(pct){ return pct<=MK_TARGET ? accentGreen : accentRed; }
-  function fcColor(pct){ return pct>=100?accentGreen:pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
-  function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:muted,flex:3},{type:'text',text:val,size:'sm',color:color||white,weight:'bold',align:'end',flex:4}]}; }
+  function mkColor(pct){ return pct<=MK_TARGET ? '#388E3C' : accentRed; }
+  function fcColor(pct){ return pct>=100?'#388E3C':pct>=70?'#4CAF50':pct>=40?warn:accentRed; }
+  function hRow(label,val,color){ return {type:'box',layout:'horizontal',contents:[{type:'text',text:label,size:'sm',color:muted,flex:3},{type:'text',text:val,size:'sm',color:color||darkText,weight:'bold',align:'end',flex:4}]}; }
 
   const bubbles = [];
   let colorIdx = 0;
@@ -2729,17 +2734,17 @@ function buildFlexBrandCarousel(rd){
     const barFilled = Math.min(10, Math.round(Math.min(100,bFcPct)/10));
     const barBoxes = [];
     for(let i=0;i<10;i++){
-      barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?fcColor(bFcPct):'#444444',cornerRadius:'2px'});
+      barBoxes.push({type:'box',layout:'vertical',contents:[{type:'filler'}],width:'8%',height:'8px',backgroundColor:i<barFilled?fcColor(bFcPct):separator,cornerRadius:'2px'});
     }
 
     // Per-platform breakdown for this brand
+    const platColors = {tt:'#E53935',sp:'#FF6F00',lz:'#1565C0'};
     const bPlatRows = FC_PLAT.map(pl=>{
-      const platColors = {tt:accentRed,sp:'#FF9800',lz:'#B388FF'};
       const tGmv = bToday?.byPlat?.[pl.k]?.gmv || 0;
       const mGmv = bMonth?.byPlat?.[pl.k]?.gmv || 0;
       return {type:'box',layout:'horizontal',contents:[
         {type:'text',text:pl.label,size:'xs',color:platColors[pl.k]||muted,flex:2},
-        {type:'text',text:'฿'+fmt(tGmv),size:'xs',color:white,align:'end',flex:3},
+        {type:'text',text:'฿'+fmt(tGmv),size:'xs',color:darkText,weight:'bold',align:'end',flex:3},
         {type:'text',text:'฿'+fmt(mGmv),size:'xs',color:muted,align:'end',flex:3}
       ],margin:'xs'};
     });
@@ -2749,32 +2754,32 @@ function buildFlexBrandCarousel(rd){
 
     bubbles.push({
       type:'bubble',size:'kilo',
-      styles:{header:{backgroundColor:hdrColor},body:{backgroundColor:'#1B1B1B'}},
+      styles:{header:{backgroundColor:hdrColor},body:{backgroundColor:white}},
       header:{type:'box',layout:'vertical',contents:[
         {type:'text',text:icon+' '+b,size:'lg',weight:'bold',color:white},
-        {type:'text',text:rd.dateLabel,size:'xs',color:'#B0BEC5',margin:'xs'}
+        {type:'text',text:rd.dateLabel,size:'xs',color:'rgba(255,255,255,0.7)',margin:'xs'}
       ],paddingAll:'14px'},
       body:{type:'box',layout:'vertical',spacing:'sm',paddingAll:'14px',contents:[
         // ── ยอดวันนี้ ──
-        {type:'text',text:'📅 วันนี้',weight:'bold',color:accentGreen,size:'xs'},
+        {type:'text',text:'วันนี้',weight:'bold',color:accentGreen,size:'xs'},
         hRow('GMV','฿'+fmt(bTodayGmv)),
-        {type:'separator',color:'#444444'},
+        {type:'separator',color:separator},
         // ── สะสมเดือน ──
-        {type:'text',text:'📆 เดือน '+rd.monthName,weight:'bold',color:'#42A5F5',size:'xs'},
+        {type:'text',text:'เดือน '+rd.monthName,weight:'bold',color:'#1565C0',size:'xs'},
         hRow('GMV สะสม','฿'+fmt(bGmv)),
         hRow('Ads','฿'+fmt(bAds)),
         hRow('MK%',bMkPct.toFixed(1)+'%',mkColor(bMkPct)),
-        hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=ROAS_TARGET?accentGreen:warn),
-        {type:'separator',color:'#444444'},
+        hRow('ROAS',bRoas.toFixed(1)+'x',bRoas>=ROAS_TARGET?'#388E3C':warn),
+        {type:'separator',color:separator},
         // ── FC ──
-        {type:'text',text:'🎯 FC: ฿'+fmt(bFcTarget),weight:'bold',color:warn,size:'xs'},
+        {type:'text',text:'FC: ฿'+fmt(bFcTarget),weight:'bold',color:warn,size:'xs'},
         {type:'box',layout:'horizontal',spacing:'xs',contents:barBoxes,margin:'xs'},
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:bFcPct.toFixed(1)+'%',size:'xs',color:fcColor(bFcPct),weight:'bold'},
           {type:'text',text:'ขาด ฿'+fmt(bFcGap),size:'xs',color:accentRed,align:'end'}
         ]},
-        {type:'text',text:'⏳ ต้องทำ/วัน ฿'+fmt(Math.round(bDailyNeed)),size:'xs',color:muted},
-        {type:'separator',color:'#444444'},
+        {type:'text',text:'ต้องทำ/วัน ฿'+fmt(Math.round(bDailyNeed)),size:'xs',color:muted},
+        {type:'separator',color:separator},
         // ── Per platform ──
         {type:'box',layout:'horizontal',contents:[
           {type:'text',text:'',size:'xs',color:muted,flex:2},
@@ -2819,11 +2824,11 @@ function renderBubbleHTML(bubble){
       const fl = c.flex!==undefined?('flex:'+c.flex):'';
       const wrap = c.wrap?'white-space:normal':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       const margin = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px'}[c.margin||'none']||'0';
-      return `<div style="font-size:${sz};font-weight:${wt};color:${c.color||'#fff'};text-align:${al};${fl};${wrap};margin-top:${margin};line-height:1.5;min-width:0">${escHtml(c.text||'')}</div>`;
+      return `<div style="font-size:${sz};font-weight:${wt};color:${c.color||'#333'};text-align:${al};${fl};${wrap};margin-top:${margin};line-height:1.5;min-width:0">${escHtml(c.text||'')}</div>`;
     }
     if(c.type==='separator'){
       const margin = {none:'0',xs:'2px',sm:'4px',md:'8px',lg:'12px'}[c.margin||'none']||'0';
-      return `<div style="height:1px;background:${c.color||'#444'};margin:${margin} 0"></div>`;
+      return `<div style="height:1px;background:${c.color||'#E0E0E0'};margin:${margin} 0"></div>`;
     }
     if(c.type==='filler') return `<div style="flex:1"></div>`;
     if(c.type==='spacer') return `<div style="height:8px"></div>`;
@@ -2831,13 +2836,14 @@ function renderBubbleHTML(bubble){
   }
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  const headerBg = bubble.styles?.header?.backgroundColor||'#1A237E';
-  const bodyBg = bubble.styles?.body?.backgroundColor||'#1B1B1B';
+  const headerBg = bubble.styles?.header?.backgroundColor||'#1B5E20';
+  const bodyBg = bubble.styles?.body?.backgroundColor||'#FFFFFF';
+  const footerBg = bubble.styles?.footer?.backgroundColor||bodyBg;
 
-  let html = `<div style="border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">`;
+  let html = `<div style="border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">`;
   if(bubble.header) html += `<div style="background:${headerBg};padding:0">${renderBox(bubble.header)}</div>`;
   if(bubble.body) html += `<div style="background:${bodyBg};padding:0">${renderBox(bubble.body)}</div>`;
-  if(bubble.footer) html += `<div style="background:${bodyBg};padding:0">${renderBox(bubble.footer)}</div>`;
+  if(bubble.footer) html += `<div style="background:${footerBg};padding:0">${renderBox(bubble.footer)}</div>`;
   html += `</div>`;
   return html;
 }
