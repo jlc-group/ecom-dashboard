@@ -1751,9 +1751,28 @@ async function saveAll(){
           const brandRows = allRows.filter(r => r.brand === b);
           if(brandRows.length === 0) continue;
 
+          // --- สลายร่างข้อมูลแฝด (Self-Healing) ---
+          // ป้องกันคนที่ไม่ยอมรีเฟรชหน้าจอเพราะกลัวเลขหาย แล้วหน่วยความจำยังมีแถวแฝดซ่อนอยู่
+          const mergedMap = {};
+          for(const r of brandRows){
+            const d = String(r.date||r.Date||'').substring(0,10);
+            if(!d) continue;
+            if(!mergedMap[d]){
+              mergedMap[d] = { ...r };
+            } else {
+              // ถ้ายอดอันไหน > 0 ให้เอามาโปะทับเลย (เผื่อเค้าพิมพ์ไว้ในแถวแฝดตัวใดตัวหนึ่ง)
+              for(const k in r){
+                if(r[k] && !isNaN(parseFloat(r[k])) && parseFloat(r[k]) > 0){
+                  mergedMap[d][k] = r[k];
+                }
+              }
+            }
+          }
+          const uniqueRows = Object.values(mergedMap);
+
           const resp = await apiFetch(API_BASE + '/api/daily/' + plat + '/bulk', {
             method: 'PUT',
-            body: JSON.stringify({ rows: brandRows })
+            body: JSON.stringify({ rows: uniqueRows })
           });
           if(!resp.ok){
             const errData = await resp.json().catch(() => ({}));
