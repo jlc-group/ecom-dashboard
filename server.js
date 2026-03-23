@@ -414,7 +414,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
       pool.query('SELECT * FROM apm_tasks ORDER BY id DESC'),
       pool.query('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 2000'),
       pool.query('SELECT brand, platform, month_index, value FROM forecast ORDER BY brand, platform, month_index'),
-      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','line_reminder_send_time','reminder_template','forecast_platforms','brand_plat_map')"),
+      pool.query("SELECT key, value FROM config WHERE key IN ('line_token','line_group','line_send_time','line_sum_send_time','line_brand_send_time','line_reminder_send_time','reminder_template','forecast_platforms','brand_plat_map','line_templates','line_custom_msgs')"),
     ]);
 
     // Build brandTargets & brandNames from brands table
@@ -474,6 +474,8 @@ app.get('/api/data', requireAuth, async (req, res) => {
       reminderItem2Title: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item2Title; } catch(e){} return undefined; })(),
       reminderItem2Desc: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').item2Desc; } catch(e){} return undefined; })(),
       reminderThankMsg: (function(){ try { return JSON.parse(configMap['reminder_template']||'{}').thankMsg; } catch(e){} return undefined; })(),
+      lineTemplates: configMap['line_templates'] || null,
+      lineCustomMsgs: configMap['line_custom_msgs'] || null,
     });
   } catch (err) {
     console.error('GET /api/data error:', err);
@@ -555,6 +557,13 @@ app.put('/api/data', requireAuth, async (req, res) => {
     }
     if (db.lineReminderSendTime !== undefined) {
       await client.query("INSERT INTO config (key, value) VALUES ('line_reminder_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineReminderSendTime || '17:00']);
+    }
+    // --- LINE Templates & Custom Messages ---
+    if (db.lineTemplates !== undefined && db.lineTemplates !== null) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
+    }
+    if (db.lineCustomMsgs !== undefined && db.lineCustomMsgs !== null) {
+      await client.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
     }
     // --- Reminder Template ---
     var reminderTpl = {};

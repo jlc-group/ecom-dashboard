@@ -1554,10 +1554,28 @@ async function initApp(){
 
 async function autoSaveAPI(){
   if(!IS_API) return;
+  // Sync sheet data from DOM
   ['tt','sp','lz'].forEach(plat=>{
     const tbody=document.getElementById('tbody-'+plat);
     if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
   });
+  // Sync employee data from DOM (ถ้ามีตาราง empConfig อยู่)
+  const empTbody = document.getElementById('empConfigTable');
+  if(empTbody && empTbody.children.length > 0){
+    const rows = empTbody.querySelectorAll('tr');
+    const emps = [];
+    rows.forEach((tr,idx)=>{
+      const name = tr.querySelector('[data-field="name"]')?.value?.trim();
+      const email = tr.querySelector('[data-field="email"]')?.value?.trim();
+      const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
+      const note = tr.querySelector('[data-field="note"]')?.value?.trim();
+      const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
+      const oldEmp = (DB.employees||[])[idx];
+      const canView = oldEmp?.canView || [];
+      if(name) emps.push({name, email, brands, note, isAdmin, canView});
+    });
+    if(emps.length > 0) DB.employees = emps;
+  }
   try {
     const resp = await apiFetch(API_BASE + '/api/data', {
       method: 'PUT',
@@ -2930,14 +2948,11 @@ async function saveLineTemplates(){
   LINE_BRAND_TPL = document.getElementById('lineBrandTpl').value;
   LINE_BRAND_ROW_TPL = document.getElementById('lineBrandRowTpl').value;
   renderLINE();
+  // บันทึกลง DB object เพื่อให้ saveDB/autosave เก็บค่าด้วย
+  DB.lineTemplates = JSON.stringify({sum:LINE_SUM_TPL,brand:LINE_BRAND_TPL,brandRow:LINE_BRAND_ROW_TPL});
   if(IS_API){
-    try {
-      await apiFetch(API_BASE+'/api/config/line_templates',{
-        method:'PUT',
-        body:JSON.stringify({value:JSON.stringify({sum:LINE_SUM_TPL,brand:LINE_BRAND_TPL,brandRow:LINE_BRAND_ROW_TPL})})
-      });
-      showToast('✅ บันทึก Template แล้ว!');
-    } catch(e){ showToast('❌ บันทึกไม่ได้: '+e.message); }
+    await saveDB();
+    showToast('✅ บันทึก Template แล้ว!');
   } else {
     localStorage.setItem('line_templates', JSON.stringify({sum:LINE_SUM_TPL,brand:LINE_BRAND_TPL,brandRow:LINE_BRAND_ROW_TPL}));
     showToast('✅ บันทึก Template แล้ว!');
@@ -2945,17 +2960,14 @@ async function saveLineTemplates(){
 }
 
 async function loadLineTemplates(){
+  // API mode: ใช้ข้อมูลจาก DB (โหลดมาพร้อม GET /api/data แล้ว — ไม่ต้องเรียก API แยก)
   try {
-    if(IS_API){
-      const resp = await apiFetch(API_BASE+'/api/config/line_templates');
-      const data = await resp.json();
-      if(data.value){
-        const t = JSON.parse(data.value);
-        LINE_SUM_TPL = t.sum || DEFAULT_LINE_SUM_TPL;
-        LINE_BRAND_TPL = t.brand || DEFAULT_LINE_BRAND_TPL;
-        LINE_BRAND_ROW_TPL = t.brandRow || DEFAULT_LINE_BRAND_ROW_TPL;
-      }
-    } else {
+    if(IS_API && DB.lineTemplates){
+      const t = typeof DB.lineTemplates === 'string' ? JSON.parse(DB.lineTemplates) : DB.lineTemplates;
+      LINE_SUM_TPL = t.sum || DEFAULT_LINE_SUM_TPL;
+      LINE_BRAND_TPL = t.brand || DEFAULT_LINE_BRAND_TPL;
+      LINE_BRAND_ROW_TPL = t.brandRow || DEFAULT_LINE_BRAND_ROW_TPL;
+    } else if(!IS_API) {
       const saved = localStorage.getItem('line_templates');
       if(saved){
         const t = JSON.parse(saved);
@@ -2967,11 +2979,10 @@ async function loadLineTemplates(){
   } catch(e){ console.warn('loadLineTemplates:', e); }
   // Load custom messages
   try {
-    if(IS_API){
-      const resp2 = await apiFetch(API_BASE+'/api/config/line_custom_msgs');
-      const data2 = await resp2.json();
-      if(data2.value) { DB.lineCustomMsgs = JSON.parse(data2.value); LINE_CUSTOM_MSGS = DB.lineCustomMsgs; }
-    } else {
+    if(IS_API && DB.lineCustomMsgs){
+      const msgs = typeof DB.lineCustomMsgs === 'string' ? JSON.parse(DB.lineCustomMsgs) : DB.lineCustomMsgs;
+      if(Array.isArray(msgs)) { DB.lineCustomMsgs = msgs; LINE_CUSTOM_MSGS = msgs; }
+    } else if(!IS_API) {
       const saved2 = localStorage.getItem('line_custom_msgs');
       if(saved2) { DB.lineCustomMsgs = JSON.parse(saved2); LINE_CUSTOM_MSGS = DB.lineCustomMsgs; }
     }
@@ -3092,15 +3103,10 @@ function copyLineMsgText(id){
 }
 
 async function saveLineCustomMsgs(){
-  DB.lineCustomMsgs = LINE_CUSTOM_MSGS;
+  DB.lineCustomMsgs = JSON.stringify(LINE_CUSTOM_MSGS);
   if(IS_API){
-    try {
-      await apiFetch(API_BASE+'/api/config/line_custom_msgs',{
-        method:'PUT',
-        body:JSON.stringify({value:JSON.stringify(LINE_CUSTOM_MSGS)})
-      });
-      showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
-    } catch(e){ showToast('❌ บันทึกไม่ได้: '+e.message); }
+    await saveDB();
+    showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
   } else {
     localStorage.setItem('line_custom_msgs', JSON.stringify(LINE_CUSTOM_MSGS));
     showToast('✅ บันทึกข้อความเพิ่มเติมแล้ว!');
@@ -3528,11 +3534,11 @@ function renderEmpConfig(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
-      <td><input class="cell left" value="${emp.name||''}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
-      <td><input class="cell left" value="${emp.email||''}" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
-      <td><input class="cell left" value="${emp.brands||''}" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
-      <td><input class="cell left" value="${emp.note||''}" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
-      <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" ${emp.isAdmin?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+      <td><input class="cell left" value="${emp.name||''}" data-ei="${i}" data-field="name" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+      <td><input class="cell left" value="${emp.email||''}" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+      <td><input class="cell left" value="${emp.brands||''}" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+      <td><input class="cell left" value="${emp.note||''}" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+      <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" ${emp.isAdmin?'checked':''} onchange="debouncedEmpSave()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
       <td style="text-align:center;">
         <button class="btn btn-ghost btn-sm" onclick="openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
       </td>
@@ -3547,16 +3553,23 @@ function addEmployeeRow(){
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td style="text-align:center;color:${EMP_COLORS[i%EMP_COLORS.length]};font-weight:700;">${i+1}</td>
-    <td><input class="cell left" value="พนักงาน ${i+1}" data-ei="${i}" data-field="name" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
-    <td><input class="cell left" value="" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
-    <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
+    <td><input class="cell left" value="พนักงาน ${i+1}" data-ei="${i}" data-field="name" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:130px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="email" placeholder="xxx@gmail.com" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:180px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="brands" placeholder="เช่น BRD_A, BRD_B" onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:160px"></td>
+    <td><input class="cell left" value="" data-ei="${i}" data-field="note" placeholder="หมายเหตุ..." onchange="debouncedEmpSave()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);width:140px"></td>
+    <td style="text-align:center;"><input type="checkbox" data-ei="${i}" data-field="isAdmin" onchange="debouncedEmpSave()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"></td>
     <td style="text-align:center;">
       <button class="btn btn-ghost btn-sm" onclick="saveEmployeeConfig();openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
     </td>
     <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
   tbody.appendChild(tr);
+}
+
+// Auto-save debounce สำหรับ employee inputs — เซฟอัตโนมัติเมื่อแก้ไข
+let _empSaveTimer = null;
+function debouncedEmpSave(){
+  clearTimeout(_empSaveTimer);
+  _empSaveTimer = setTimeout(()=>{ saveEmployeeConfig(); }, 800);
 }
 
 function saveEmployeeConfig(){
