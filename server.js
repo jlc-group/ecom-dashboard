@@ -497,12 +497,27 @@ app.post('/api/data/beacon', async (req, res) => {
     // Reuse the same save logic — forward to PUT handler
     req.user = decoded;
     req.body = req.body || {};
-    // Use the same save transaction
+    var db = req.body;
+
+    // === 1) Config values — save OUTSIDE transaction (safe, idempotent upserts) ===
+    try {
+      var configKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
+      for (var [jsKey, dbKey] of Object.entries(configKeys)) {
+        if (db[jsKey] !== undefined) {
+          await pool.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dbKey, db[jsKey] || '']);
+        }
+      }
+      if (db.lineTemplates) await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
+      if (db.lineCustomMsgs) await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
+      console.log('[BEACON] config saved OK');
+    } catch(eCfg) {
+      console.error('[BEACON] config save error:', eCfg.message);
+    }
+
+    // === 2) Platform data + brands + employees — in transaction (can fail independently) ===
     var client = await pool.connect();
     try {
       await client.query('BEGIN');
-      var db = req.body;
-
       // Platform data first (FK)
       for (var plat of ['tt', 'sp', 'lz']) {
         var table = TABLE_MAP[plat];
@@ -518,15 +533,6 @@ app.post('/api/data/beacon', async (req, res) => {
           await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
         }
       }
-      // Config values
-      var configKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
-      for (var [jsKey, dbKey] of Object.entries(configKeys)) {
-        if (db[jsKey] !== undefined) {
-          await client.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dbKey, db[jsKey] || '']);
-        }
-      }
-      if (db.lineTemplates) await client.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
-      if (db.lineCustomMsgs) await client.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
       // Employees
       if (Array.isArray(db.employees)) {
         var existingEmps = await client.query('SELECT id, email FROM employees');
@@ -553,7 +559,7 @@ app.post('/api/data/beacon', async (req, res) => {
       await client.query('COMMIT');
     } catch(e2) {
       await client.query('ROLLBACK');
-      console.error('beacon save error:', e2.message);
+      console.error('[BEACON] data save error:', e2.message);
     } finally {
       client.release();
     }
@@ -623,10 +629,34 @@ app.patch('/api/config', requireAuth, async (req, res) => {
 // PUT /api/data — Save entire DB (mimics the old saveDB)
 // ============================================================
 app.put('/api/data', requireAuth, async (req, res) => {
+  const db = req.body;
+
+  // === 1) Config values — save OUTSIDE transaction (safe, won't be rolled back) ===
+  try {
+    var cfgKeys = {lineToken:'line_token',lineGroup:'line_group',lineSendTime:'line_send_time',lineSumSendTime:'line_sum_send_time',lineBrandSendTime:'line_brand_send_time',lineReminderSendTime:'line_reminder_send_time',lineSendSummary:'line_send_summary',lineSendBrand:'line_send_brand'};
+    for (var [jk, dk] of Object.entries(cfgKeys)) {
+      if (db[jk] !== undefined) await pool.query("INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [dk, db[jk] || '']);
+    }
+    if (db.lineTemplates !== undefined && db.lineTemplates !== null) await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
+    if (db.lineCustomMsgs !== undefined && db.lineCustomMsgs !== null) await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
+    if (Array.isArray(db.forecastPlatforms)) await pool.query("INSERT INTO config (key, value) VALUES ('forecast_platforms', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.forecastPlatforms)]);
+    if (db.brandPlatMap && typeof db.brandPlatMap === 'object') await pool.query("INSERT INTO config (key, value) VALUES ('brand_plat_map', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.brandPlatMap)]);
+    var reminderTpl = {};
+    if (db.reminderTitle !== undefined) reminderTpl.title = db.reminderTitle;
+    if (db.reminderItem1Title !== undefined) reminderTpl.item1Title = db.reminderItem1Title;
+    if (db.reminderItem1Desc !== undefined) reminderTpl.item1Desc = db.reminderItem1Desc;
+    if (db.reminderItem2Title !== undefined) reminderTpl.item2Title = db.reminderItem2Title;
+    if (db.reminderItem2Desc !== undefined) reminderTpl.item2Desc = db.reminderItem2Desc;
+    if (db.reminderThankMsg !== undefined) reminderTpl.thankMsg = db.reminderThankMsg;
+    if (Object.keys(reminderTpl).length > 0) await pool.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(reminderTpl)]);
+  } catch(eCfg) {
+    console.error('[SAVE] config save error:', eCfg.message);
+  }
+
+  // === 2) Platform data + brands + employees — in transaction ===
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const db = req.body;
 
     // --- Platform data FIRST (FK: daily_*.brand → brands.code) ---
     for (const plat of ['tt', 'sp', 'lz']) {
@@ -643,16 +673,6 @@ app.put('/api/data', requireAuth, async (req, res) => {
         var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
         await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
       }
-    }
-
-    // --- Forecast Platforms (save to config) ---
-    if (Array.isArray(db.forecastPlatforms)) {
-      await client.query("INSERT INTO config (key, value) VALUES ('forecast_platforms', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.forecastPlatforms)]);
-    }
-
-    // --- Brand-Platform Mapping (save to config) ---
-    if (db.brandPlatMap && typeof db.brandPlatMap === 'object') {
-      await client.query("INSERT INTO config (key, value) VALUES ('brand_plat_map', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(db.brandPlatMap)]);
     }
 
     // --- Forecast GMV (dynamic platforms) ---
@@ -673,51 +693,6 @@ app.put('/api/data', requireAuth, async (req, res) => {
           }
         }
       }
-    }
-
-    // --- LINE Config ---
-    if (db.lineToken !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_token', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineToken || '']);
-    }
-    if (db.lineGroup !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_group', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineGroup || '']);
-    }
-    if (db.lineSendTime !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSendTime || '09:00']);
-    }
-    if (db.lineSumSendTime !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_sum_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSumSendTime || '']);
-    }
-    if (db.lineBrandSendTime !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_brand_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineBrandSendTime || '']);
-    }
-    if (db.lineReminderSendTime !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_reminder_send_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineReminderSendTime || '17:00']);
-    }
-    // --- LINE Send Toggles ---
-    if (db.lineSendSummary !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_send_summary', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSendSummary || 'YES']);
-    }
-    if (db.lineSendBrand !== undefined) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_send_brand', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [db.lineSendBrand || 'YES']);
-    }
-    // --- LINE Templates & Custom Messages ---
-    if (db.lineTemplates !== undefined && db.lineTemplates !== null) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineTemplates === 'string' ? db.lineTemplates : JSON.stringify(db.lineTemplates)]);
-    }
-    if (db.lineCustomMsgs !== undefined && db.lineCustomMsgs !== null) {
-      await client.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [typeof db.lineCustomMsgs === 'string' ? db.lineCustomMsgs : JSON.stringify(db.lineCustomMsgs)]);
-    }
-    // --- Reminder Template ---
-    var reminderTpl = {};
-    if (db.reminderTitle !== undefined) reminderTpl.title = db.reminderTitle;
-    if (db.reminderItem1Title !== undefined) reminderTpl.item1Title = db.reminderItem1Title;
-    if (db.reminderItem1Desc !== undefined) reminderTpl.item1Desc = db.reminderItem1Desc;
-    if (db.reminderItem2Title !== undefined) reminderTpl.item2Title = db.reminderItem2Title;
-    if (db.reminderItem2Desc !== undefined) reminderTpl.item2Desc = db.reminderItem2Desc;
-    if (db.reminderThankMsg !== undefined) reminderTpl.thankMsg = db.reminderThankMsg;
-    if (Object.keys(reminderTpl).length > 0) {
-      await client.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(reminderTpl)]);
     }
 
     // --- Employees: อัพเดตเฉพาะ name, brands, note, is_admin ของคนที่มีอยู่แล้ว ---
