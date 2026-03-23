@@ -24,6 +24,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .logo p{font-size:11px;color:var(--muted);}
 .header-actions{display:flex;gap:8px;align-items:center;}
 select,button{font-family:inherit;}
+select{background:var(--surface2);color:var(--text);}
+select option{background:var(--surface2);color:var(--text);}
 .sel{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;outline:none;}
 .btn{border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600;}
 .btn-primary{background:var(--accent);color:#fff;}
@@ -3729,14 +3731,30 @@ function closeViewPerm(){
   _permEmpIdx = -1;
 }
 
-function saveViewPerm(){
+async function saveViewPerm(){
   if(_permEmpIdx<0) return;
   const emps = DB.employees||[];
   const me = emps[_permEmpIdx];
   if(!me) return;
   const checked = document.querySelectorAll('#permCheckList input[type=checkbox]:checked');
   me.canView = Array.from(checked).map(cb=>cb.value);
-  saveDB();
+  // ใช้ PUT /api/employees โดยตรง — ไม่ผ่าน saveDB() เพื่อป้องกัน stale overwrite
+  if(IS_API){
+    try {
+      setSaveStatus('saving','⏳ กำลังบันทึก...');
+      const resp = await apiFetch(API_BASE + '/api/employees', {
+        method: 'PUT',
+        body: JSON.stringify({employees: emps})
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      setSaveStatus('ok','✅ บันทึกแล้ว');
+    } catch(e){
+      console.error('saveViewPerm error:', e);
+      setSaveStatus('err','❌ บันทึกไม่ได้');
+    }
+  } else {
+    await saveDB();
+  }
   showToast(`✅ บันทึกสิทธิ์ของ "${me.name}" แล้ว`);
   closeViewPerm();
 }
