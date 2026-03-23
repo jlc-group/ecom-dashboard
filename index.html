@@ -1279,7 +1279,7 @@ const PLAT_FIELDS = {
     {k:'saleAds',t:'n'},{k:'organic',t:'n'},{k:'gmvLive',t:'n'},
     {k:'cogs',t:'n'},{k:'promo',t:'n'},{k:'free',t:'n'},
     {k:'kol',t:'n'},{k:'prodLive',t:'n'},{k:'commLive',t:'n'},{k:'commCreator',t:'n'},
-    {k:'costGMVAds',t:'n'},{k:'costGMVLive',t:'n'},
+    {k:'costGmvAds',t:'n'},{k:'costGmvLive',t:'n'},
     // calculated
     {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
   ],
@@ -1305,10 +1305,10 @@ const PLAT_FIELDS = {
 function calcRow(plat, r) {
   const n = k => parseFloat(r[k]||0)||0;
   if(plat==='tt'){
-    const totalExp = n('cogs')+n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGMVAds')+n('costGMVLive');
+    const totalExp = n('cogs')+n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
     const nm = n('gmv') - totalExp;
     const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
-    const adsTotal = n('costGMVAds')+n('costGMVLive');
+    const adsTotal = n('costGmvAds')+n('costGmvLive');
     const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
     return {...r, totalExp, nm, nmPct, roas};
   }
@@ -1619,11 +1619,8 @@ async function autoSaveAPI(){
 // Save เมื่อออกจากหน้า (beforeunload) — ใช้ sendBeacon เพื่อให้ส่งได้แม้หน้าจะปิด
 function saveOnLeave(){
   if(!IS_API || !AUTH_TOKEN) return;
-  // Sync sheet data from DOM
-  ['tt','sp','lz'].forEach(plat=>{
-    const tbody=document.getElementById('tbody-'+plat);
-    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
-  });
+  // Sync sheet data from DOM (merge เฉพาะ brand+month ที่แสดง ไม่ทับ brand อื่น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
   // Sync LINE config from DOM
   // NOTE: ไม่ sync LINE config จาก DOM ที่นี่ เพราะถ้า LINE tab ยังไม่ถูกเปิด
   // input จะมีค่า default (09:00, 17:00) ซึ่งจะทับค่าจริงใน DB
@@ -1649,11 +1646,8 @@ function autoSaveGAS(){
 }
 
 async function saveAll(){
-  // sync table → DB
-  ['tt','sp','lz'].forEach(plat=>{
-    const tbody=document.getElementById('tbody-'+plat);
-    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
-  });
+  // sync table → DB (merge เฉพาะ brand+month ที่แสดง ไม่ทับข้อมูล brand อื่น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
   const brand=document.getElementById('selBrand').value;
   logAudit('system','',brand,'','','','บันทึก');
 
@@ -1776,6 +1770,35 @@ function getTableRows(plat){
     rows.push(calcRow(plat, r));
   });
   return rows;
+}
+
+// ── Sync visible table rows back to DB WITHOUT losing other brands/months ──
+function syncTableToDB(plat){
+  const tbody = document.getElementById('tbody-'+plat);
+  if(!tbody || !tbody.querySelector('tr[data-row]')) return;
+
+  const currentBrand = document.getElementById('selBrand').value;
+  const currentMonth = document.getElementById('selMonth').value;
+
+  // ถ้าเลือก "ทุกแบรนด์" จะไม่มี data rows (แสดงแค่ warning) → ไม่ต้อง sync
+  if(currentBrand === 'all') return;
+
+  // อ่าน rows จาก DOM (เฉพาะ brand+month ที่กำลังแสดง)
+  const visibleRows = getTableRows(plat);
+
+  // เก็บ rows จาก DB ที่ไม่ได้แสดงอยู่ (brand อื่น หรือ month อื่น)
+  const kept = (DB[plat]||[]).filter(r => {
+    // เก็บ rows ของ brand อื่น
+    if(r.brand && r.brand !== currentBrand) return true;
+    // เก็บ rows ของ month อื่น
+    if(currentMonth && currentMonth !== 'all' && r.date){
+      const rowMonth = r.date.substring(0,7);
+      if(rowMonth !== currentMonth) return true;
+    }
+    return false; // row นี้ตรงกับ brand+month ที่แสดง → จะถูกแทนที่ด้วย visibleRows
+  });
+
+  DB[plat] = kept.concat(visibleRows);
 }
 
 function renderSheet(plat, rows){
@@ -1950,7 +1973,7 @@ function aggregateByBrand(rows){
     brands[b].gmv+=n('gmv'); brands[b].nm+=n('nm');
     brands[b].orders+=n('orders'); brands[b].cogs+=n('cogs');
     let ads=0;
-    if(r.platform==='tt') ads=n('costGMVAds')+n('costGMVLive');
+    if(r.platform==='tt') ads=n('costGmvAds')+n('costGmvLive');
     else if(r.platform==='sp') ads=n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
     else if(r.platform==='lz') ads=n('lzsd')+n('lzGmvMax')+n('affLz');
     brands[b].ads+=ads;
@@ -1974,7 +1997,7 @@ function aggregateByPlat(rows){
     p[pl].gmv+=parseFloat(r.gmv||0);
     p[pl].nm+=parseFloat(r.nm||0);
     let ads=0;
-    if(pl==='tt') ads=parseFloat(r.costGMVAds||0)+parseFloat(r.costGMVLive||0);
+    if(pl==='tt') ads=parseFloat(r.costGmvAds||0)+parseFloat(r.costGmvLive||0);
     else if(pl==='sp') ads=['spAds','fbCpas','affiliate','searchAds','shopAds','productAds'].reduce((s,k)=>s+parseFloat(r[k]||0),0);
     else if(pl==='lz') ads=['lzsd','lzGmvMax','affLz'].reduce((s,k)=>s+parseFloat(r[k]||0),0);
     p[pl].ads+=ads;
@@ -2192,13 +2215,8 @@ function exportCSV(){
 // REFRESH ALL
 // ============================================================
 function refreshAll(){
-  // sync from table if on sheet page
-  ['tt','sp','lz'].forEach(plat=>{
-    const tbody=document.getElementById('tbody-'+plat);
-    if(tbody && tbody.children.length>0){
-      DB[plat]=getTableRows(plat);
-    }
-  });
+  // sync from table if on sheet page (merge ไม่ทับ brand อื่น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
   const active=document.querySelector('.page.active');
   if(active?.id==='page-dashboard') renderDashboard();
   if(active?.id==='page-monthly') renderMonthly();
@@ -2486,7 +2504,7 @@ function renderDailyDash(){
   const platName={tt:'TikTok',sp:'Shopee',lz:'Lazada'};
   document.getElementById('tbDailyDash').innerHTML = filtered.map(r=>{
     let ads=0;
-    if(r.platform==='tt') ads=p(r.costGMVAds)+p(r.costGMVLive);
+    if(r.platform==='tt') ads=p(r.costGmvAds)+p(r.costGmvLive);
     else if(r.platform==='sp') ads=['spAds','fbCpas','affiliate','searchAds','shopAds','productAds'].reduce((s,k)=>s+p(r[k]),0);
     else if(r.platform==='lz') ads=['lzsd','lzGmvMax','affLz'].reduce((s,k)=>s+p(r[k]),0);
     const nm=p(r.nm), gmv=p(r.gmv);
@@ -3228,7 +3246,7 @@ function getLineReportData(){
   // Ads only (for ROAS calculation)
   function calcAds(r){
     const n=k=>parseFloat(r[k]||0);
-    if(r.platform==='tt') return n('costGMVAds')+n('costGMVLive');
+    if(r.platform==='tt') return n('costGmvAds')+n('costGmvLive');
     if(r.platform==='sp') return n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
     if(r.platform==='lz') return n('lzsd')+n('lzGmvMax')+n('affLz');
     return 0;
@@ -3236,7 +3254,7 @@ function getLineReportData(){
   // MK cost = promo + free + kol + commission + ads (ไม่รวม cogs, platFee)
   function calcTotalCost(r){
     const n=k=>parseFloat(r[k]||0);
-    if(r.platform==='tt') return n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGMVAds')+n('costGMVLive');
+    if(r.platform==='tt') return n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
     if(r.platform==='sp') return n('promo')+n('free')+n('commCreator')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
     if(r.platform==='lz') return n('promo')+n('free')+n('commCreator')+n('lzsd')+n('lzGmvMax')+n('affLz');
     return 0;
@@ -4254,11 +4272,8 @@ function genAllSheetRows(){
 // BRAND CHANGE HANDLER
 // ============================================================
 function onBrandChange(){
-  // บันทึก rows ปัจจุบันก่อนเปลี่ยน brand
-  ['tt','sp','lz'].forEach(plat => {
-    const tbody = document.getElementById('tbody-'+plat);
-    if(tbody && tbody.querySelector('tr[data-row]')) DB[plat] = getTableRows(plat);
-  });
+  // บันทึก rows ปัจจุบันก่อนเปลี่ยน brand (merge ไม่ทับ brand อื่น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
   saveDB();
   // regenerate แถวใหม่ตาม brand ที่เลือก
   genAllSheetRows();
@@ -4284,11 +4299,8 @@ function updateBrandLabels(){
 // MONTH CHANGE HANDLER
 // ============================================================
 function onMonthChange(){
-  // sync current sheet data to DB before switching
-  ['tt','sp','lz'].forEach(plat => {
-    const tbody = document.getElementById(`tbody-${plat}`);
-    if(tbody && tbody.querySelector('tr[data-row]')) DB[plat] = getTableRows(plat);
-  });
+  // sync current sheet data to DB before switching (merge ไม่ทับ brand/month อื่น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
   saveDB();
   genAllSheetRows();
   refreshAll();
