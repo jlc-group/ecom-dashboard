@@ -653,26 +653,38 @@ app.put('/api/data', requireAuth, async (req, res) => {
     console.error('[SAVE] config save error:', eCfg.message);
   }
 
-  // === 2) Platform data + brands + employees — in transaction ===
+  // === 2) Employees — save OUTSIDE transaction (safe, independent) ===
+  try {
+    if (Array.isArray(db.employees)) {
+      var existingEmps = await pool.query('SELECT id, email FROM employees');
+      var empMap = {};
+      existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
+      for (var emp of db.employees) {
+        var empKey = (emp.email||'').toLowerCase();
+        var exEmp = empMap[empKey];
+        if(exEmp){
+          var canViewStr = Array.isArray(emp.canView) ? emp.canView.join(',') : (emp.canView||'');
+          await pool.query(
+            'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6',
+            [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, canViewStr, exEmp.id]
+          );
+        }
+      }
+    }
+  } catch(eEmp) {
+    console.error('[SAVE] employee save error:', eEmp.message);
+  }
+
+  // === 3) Platform data + forecast — in transaction ===
+  // Brands ไม่ save ที่นี่แล้ว — ใช้ PUT /api/brands แทน
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // --- Platform data FIRST (FK: daily_*.brand → brands.code) ---
+    // --- Platform data FIRST ---
     for (const plat of ['tt', 'sp', 'lz']) {
       const table = TABLE_MAP[plat];
       await client.query('DELETE FROM ' + table);
-    }
-
-    // --- Brands (safe to delete now that daily tables are empty) ---
-    if (Array.isArray(db.brands)) {
-      await client.query('DELETE FROM brands');
-      for (var bi = 0; bi < db.brands.length; bi++) {
-        var bCode = db.brands[bi];
-        var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
-        var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
-        await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
-      }
     }
 
     // --- Forecast GMV (dynamic platforms) ---
@@ -692,27 +704,6 @@ app.put('/api/data', requireAuth, async (req, res) => {
             }
           }
         }
-      }
-    }
-
-    // --- Employees: อัพเดตเฉพาะ name, brands, note, is_admin ของคนที่มีอยู่แล้ว ---
-    // ไม่ INSERT/DELETE พนักงาน — ใช้ปุ่ม "บันทึกพนักงาน" หรือ Google login แทน
-    console.log('[SAVE] PUT /api/data employees section — UPDATE only, NO INSERT/DELETE (v2)');
-    if (Array.isArray(db.employees)) {
-      var existingEmps = await client.query('SELECT id, email FROM employees');
-      var empMap = {};
-      existingEmps.rows.forEach(function(r){ if(r.email) empMap[r.email.toLowerCase()] = r; });
-      for (var emp of db.employees) {
-        var empKey = (emp.email||'').toLowerCase();
-        var exEmp = empMap[empKey];
-        if(exEmp){
-          var canViewStr = Array.isArray(emp.canView) ? emp.canView.join(',') : (emp.canView||'');
-          await client.query(
-            'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6',
-            [emp.name||'', emp.brands||'', emp.note||'', emp.isAdmin||false, canViewStr, exEmp.id]
-          );
-        }
-        // ไม่ INSERT ใหม่ และไม่ DELETE — จัดการผ่านหน้า admin เท่านั้น
       }
     }
 
