@@ -406,7 +406,7 @@ app.get('/api/config', (req, res) => {
 app.get('/api/data', requireAuth, async (req, res) => {
   try {
     const [brands, employees, tt, sp, lz, apmTasks, auditLog, forecast, configRows] = await Promise.all([
-      pool.query('SELECT code, name, target_nm FROM brands ORDER BY name'),
+      pool.query('SELECT code, name, target_nm FROM brands ORDER BY sort_order, name'),
       pool.query('SELECT id, name, email, brands, note, is_admin, status, picture, visible_tabs, editable_tabs FROM employees WHERE status = $1 ORDER BY id', ['approved']),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
@@ -515,7 +515,7 @@ app.post('/api/data/beacon', async (req, res) => {
           var bCode = db.brands[bi];
           var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
           var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
-          await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [bCode, bName, bTarget]);
+          await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
         }
       }
       // Config values
@@ -586,7 +586,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
         var bCode = db.brands[bi];
         var bName = (db.brandNames && db.brandNames[bCode]) || bCode;
         var bTarget = (db.brandTargets && db.brandTargets[bCode] && db.brandTargets[bCode].nm != null) ? db.brandTargets[bCode].nm : 8.5;
-        await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [bCode, bName, bTarget]);
+        await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [bCode, bName, bTarget, bi]);
       }
     }
 
@@ -772,7 +772,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 // ============================================================
 app.get('/api/brands', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT code, name, target_nm FROM brands ORDER BY name');
+    const { rows } = await pool.query('SELECT code, name, target_nm FROM brands ORDER BY sort_order, name');
     res.json(rows.map(r => ({ code: r.code, name: r.name, targetNm: r.target_nm })));
   } catch (err) {
     console.error('GET /api/brands error:', err.message);
@@ -792,7 +792,7 @@ app.put('/api/brands', requireAuth, async (req, res) => {
       var code = brandList[i];
       var nm = (targets[code] && targets[code].nm != null) ? targets[code].nm : 8.5;
       var bname = names[code] || code;
-      await client.query('INSERT INTO brands (code, name, target_nm) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [code, bname, nm]);
+      await client.query('INSERT INTO brands (code, name, target_nm, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [code, bname, nm, i]);
     }
     await client.query('COMMIT');
     res.json({ success: true });
@@ -1071,7 +1071,7 @@ app.get('/api/line/schedule', async (req, res) => {
 
     // ดึงข้อมูลทั้งหมด
     var [brandsRes, tt, sp, lz, fcRes] = await Promise.all([
-      pool.query('SELECT code, name, target_nm FROM brands ORDER BY name'),
+      pool.query('SELECT code, name, target_nm FROM brands ORDER BY sort_order, name'),
       pool.query('SELECT * FROM daily_tiktok ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_shopee ORDER BY date DESC, brand'),
       pool.query('SELECT * FROM daily_lazada ORDER BY date DESC, brand'),
@@ -1857,6 +1857,22 @@ process.on('unhandledRejection', (err) => {
 // ============================================================
 // Start
 // ============================================================
+// Auto-migrate: add sort_order column and set initial order
+(async function(){
+  try {
+    await pool.query("ALTER TABLE brands ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0");
+    // Set desired order for existing brands (one-time: only if all are 0)
+    var { rows } = await pool.query("SELECT COUNT(*) as c FROM brands WHERE sort_order != 0");
+    if(parseInt(rows[0].c) === 0){
+      var order = {'JH-ECOM':0,'J-DENT':1,'JNIS':2,'JARVIT':3,'BEAUTERRY':4};
+      for(var [code, idx] of Object.entries(order)){
+        await pool.query("UPDATE brands SET sort_order = $1 WHERE UPPER(code) = $2", [idx, code]);
+      }
+      console.log('[MIGRATE] Brand sort_order initialized');
+    }
+  } catch(e){ console.warn('brands migration:', e.message); }
+})();
+
 app.listen(PORT, function() {
   console.log('ECOM Dashboard API running on port ' + PORT + ' | version: ' + SERVER_VERSION + ' | AUTO_APPROVE=' + AUTO_APPROVE_USERS);
 });
