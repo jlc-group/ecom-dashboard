@@ -1696,6 +1696,39 @@ app.get('/api/line/reminder-preview', function(req, res) {
 });
 
 // ============================================================
+// Config endpoints — LINE templates & custom messages
+// ============================================================
+app.get('/api/config/line_templates', requireAuth, async function(req, res) {
+  try {
+    var { rows } = await pool.query("SELECT value FROM config WHERE key = 'line_templates'");
+    res.json({ value: rows.length > 0 ? rows[0].value : null });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/config/line_templates', requireAuth, async function(req, res) {
+  try {
+    var value = req.body.value || '';
+    await pool.query("INSERT INTO config (key, value) VALUES ('line_templates', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [value]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/config/line_custom_msgs', requireAuth, async function(req, res) {
+  try {
+    var { rows } = await pool.query("SELECT value FROM config WHERE key = 'line_custom_msgs'");
+    res.json({ value: rows.length > 0 ? rows[0].value : null });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/config/line_custom_msgs', requireAuth, async function(req, res) {
+  try {
+    var value = req.body.value || '';
+    await pool.query("INSERT INTO config (key, value) VALUES ('line_custom_msgs', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [value]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
 // Health check
 // ============================================================
 app.get('/api/health', async (req, res) => {

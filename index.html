@@ -2947,7 +2947,7 @@ async function saveLineTemplates(){
 async function loadLineTemplates(){
   try {
     if(IS_API){
-      const resp = await fetch(API_BASE+'/api/config/line_templates');
+      const resp = await apiFetch(API_BASE+'/api/config/line_templates');
       const data = await resp.json();
       if(data.value){
         const t = JSON.parse(data.value);
@@ -2968,7 +2968,7 @@ async function loadLineTemplates(){
   // Load custom messages
   try {
     if(IS_API){
-      const resp2 = await fetch(API_BASE+'/api/config/line_custom_msgs');
+      const resp2 = await apiFetch(API_BASE+'/api/config/line_custom_msgs');
       const data2 = await resp2.json();
       if(data2.value) { DB.lineCustomMsgs = JSON.parse(data2.value); LINE_CUSTOM_MSGS = DB.lineCustomMsgs; }
     } else {
