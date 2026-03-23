@@ -2202,7 +2202,7 @@ function addBrandRow(){
   tbody.appendChild(tr);
 }
 
-function saveBrandConfig(){
+async function saveBrandConfig(){
   const rows = document.querySelectorAll('#brandConfigTable tr');
   const newBrands=[], targets={}, names={};
   rows.forEach(tr=>{
@@ -2217,8 +2217,10 @@ function saveBrandConfig(){
   DB.lineToken = document.getElementById('lineToken')?.value||'';
   DB.lineGroup = document.getElementById('lineGroup')?.value||'';
   DB.lineSendTime = document.getElementById('lineSendTime')?.value||'09:00';
+  DB.lineSendSummary = document.getElementById('lineSendSummary')?.value||'YES';
+  DB.lineSendBrand = document.getElementById('lineSendBrand')?.value||'YES';
   BRANDS.length=0; newBrands.forEach(b=>BRANDS.push(b));
-  saveDB(); updateBrandDropdowns();
+  await saveDB(); updateBrandDropdowns();
   showToast('✅ บันทึก Config แล้ว!');
 }
 
@@ -2258,7 +2260,7 @@ function addFcPlatRow(){
   tbody.appendChild(tr);
 }
 
-function saveFcPlatConfig(){
+async function saveFcPlatConfig(){
   const rows = document.querySelectorAll('#fcPlatConfigTable tr');
   const platforms = [];
   rows.forEach(tr=>{
@@ -2273,7 +2275,7 @@ function saveFcPlatConfig(){
   if(new Set(keys).size!==keys.length){ showToast('⚠️ รหัสช่องทางซ้ำกัน!'); return; }
   DB.forecastPlatforms = platforms;
   FC_PLAT = platforms;
-  saveDB();
+  await saveDB();
   showToast('✅ บันทึกช่องทาง Forecast แล้ว!');
   renderBrandPlatMap();
   renderForecast();
@@ -2315,7 +2317,7 @@ function toggleAllPlatForBrand(brand, checked){
   document.querySelectorAll(`#brandPlatMapTable input[data-brand="${brand}"]`).forEach(cb=>cb.checked=checked);
 }
 
-function saveBrandPlatMap(){
+async function saveBrandPlatMap(){
   const map = {};
   const brands = DB.brands||[];
   brands.forEach(b=>{
@@ -2325,7 +2327,7 @@ function saveBrandPlatMap(){
     if(selected.length>0) map[b] = selected;
   });
   DB.brandPlatMap = map;
-  saveDB();
+  await saveDB();
   showToast('✅ บันทึกแบรนด์×ช่องทาง แล้ว!');
   renderForecast();
 }
@@ -3517,8 +3519,8 @@ function renderForecastCharts(){
   ]},options:{responsive:true,scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.03)'}}},plugins:{legend:{labels:{color:'#8892b0'}}}}});
 }
 
-function saveForecast(){
-  saveDB();
+async function saveForecast(){
+  await saveDB();
   showToast('✅ บันทึกเป้าหมายแล้ว!');
 }
 
@@ -3574,7 +3576,7 @@ function debouncedEmpSave(){
   _empSaveTimer = setTimeout(()=>{ saveEmployeeConfig(); }, 800);
 }
 
-function saveEmployeeConfig(){
+async function saveEmployeeConfig(){
   const rows = document.querySelectorAll('#empConfigTable tr');
   const newEmps = [];
   rows.forEach(tr=>{
@@ -3590,7 +3592,7 @@ function saveEmployeeConfig(){
     if(name) newEmps.push({name, email, brands, note, isAdmin, canView});
   });
   DB.employees = newEmps;
-  saveDB();
+  await saveDB();
   showToast('✅ บันทึกข้อมูลพนักงานแล้ว!');
 }
 
