@@ -1646,21 +1646,41 @@ function clearDraft(){
 function checkAndRestoreDraft(){
   if(!IS_API) return;
   try {
-    const raw = localStorage.getItem('ecom_draft');
+    const raw = localStorage.getItem('ecom_db_draft'); // FIX: ต้องดึงของ api
     if(!raw) return;
     const draft = JSON.parse(raw);
+    
+    // หาเวลา
     const age = Date.now() - (draft.ts || 0);
-    // Draft เก่าเกิน 24 ชม. → ลบทิ้ง
-    if(age > 24 * 60 * 60 * 1000){ localStorage.removeItem('ecom_draft'); return; }
+    if(age > 24 * 60 * 60 * 1000){ localStorage.removeItem('ecom_db_draft'); return; }
+    
     const mins = Math.round(age / 60000);
-    if(confirm('🔔 พบข้อมูลที่ยังไม่ได้บันทึก (' + mins + ' นาทีก่อน)\n\nต้องการเรียกคืนหรือไม่?')){
-      if(draft.tt) DB.tt = draft.tt;
-      if(draft.sp) DB.sp = draft.sp;
-      if(draft.lz) DB.lz = draft.lz;
+    if(confirm('🔔 พบตารางที่ยังไม่ได้บันทึก (' + mins + ' นาทีก่อน)\\n\\nต้องการเรียกคืนหรือไม่?')){
+      
+      for(const plat of ['tt','sp','lz']){
+        if(draft[plat] && draft[plat].length > 0){
+          if(!DB[plat]) DB[plat] = [];
+          for(const dr of draft[plat]){
+            const drDate = String(dr.date || dr.Date || '').substring(0, 10);
+            const drBrand = dr.brand || dr.Brand;
+            const idx = DB[plat].findIndex(r => {
+              const rDate = String(r.date || r.Date || '').substring(0, 10);
+              const rBrand = r.brand || r.Brand;
+              return rDate && rDate === drDate && rBrand === drBrand;
+            });
+            if(idx !== -1){
+              DB[plat][idx] = { ...DB[plat][idx], ...dr };
+            } else {
+              DB[plat].push(dr);
+            }
+          }
+        }
+      }
       showToast('✅ เรียกคืน draft แล้ว — กด "บันทึก" เพื่อ save ลง server');
-      renderSheet();
+      if(activeTab.startsWith('daily_')) renderDailyTable();
+      if(activeTab === 'dashboard') renderDashboard();
     } else {
-      localStorage.removeItem('ecom_draft');
+      localStorage.removeItem('ecom_db_draft');
     }
   } catch(e) {
     console.warn('checkDraft error:', e);
