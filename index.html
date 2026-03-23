@@ -3935,10 +3935,18 @@ function deleteAPMTask(id){
 
 let _apmSaveTimer = null;
 function apmUpdate(id, field, value){
-  const task = (DB.apmTasks||[]).find(t=>t.id===id);
-  if(task) task[field]=value;
-  // Auto-save debounce 1.5 วินาที หลังแก้ field สุดท้าย
-  apmAutoSave();
+  let task = (DB.apmTasks||[]).find(t => String(t.id) === String(id));
+  
+  // ย้อนกลับไปหาระบบ Index เผื่อว่าเป็น row ใหม่ที่เพิ่งกด '+ เพิ่มงาน' แล้วยังไม่มี id
+  if(!task){
+    task = (DB.apmTasks||[])[id];
+  }
+
+  if(task) {
+    task[field] = value;
+    // Auto-save debounce 1.5 วินาที หลังแก้ field สุดท้าย
+    apmAutoSave();
+  }
 }
 
 function apmAutoSave(){
