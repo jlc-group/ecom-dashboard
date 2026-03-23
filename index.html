@@ -711,9 +711,7 @@ input[type=number]{-moz-appearance:textfield;}
     <select class="sel" id="ddDate" onchange="renderDailyDash()">
       <option value="all">ทุกวัน</option>
     </select>
-    <select class="sel" id="ddBrand" onchange="renderDailyDash()">
-      <option value="all">ทุกแบรนด์</option>
-    </select>
+
     <select class="sel" id="ddPlat" onchange="renderDailyDash()">
       <option value="all">ทุก Platform</option>
       <option value="tt">TikTok</option>
@@ -2364,6 +2362,9 @@ function refreshAll(){
   if(active?.id==='page-dashboard') renderDashboard();
   if(active?.id==='page-monthly') renderMonthly();
   if(active?.id==='page-apm') renderAPM();
+  if(active?.id==='page-daily_dash') renderDailyDash();
+  if(active?.id==='page-ads') renderAds();
+  if(active?.id==='page-line') renderLINE();
 }
 
 // ============================================================
@@ -2618,13 +2619,8 @@ function renderDailyDash(){
   const curDate = ddDate.value;
   ddDate.innerHTML = '<option value="all">ทุกวัน</option>' + dates.map(d=>`<option value="${d}" ${d===curDate?'selected':''}>${d}</option>`).join('');
 
-  // populate brand dropdown
-  const ddBrand = document.getElementById('ddBrand');
-  const curBrand = ddBrand.value;
-  ddBrand.innerHTML = '<option value="all">ทุกแบรนด์</option>' + BRANDS.map(b=>`<option value="${b}" ${b===curBrand?'selected':''}>${b}</option>`).join('');
-
   const selDate = ddDate.value;
-  const selBrand = ddBrand.value;
+  const selBrand = document.getElementById('selBrand').value;
   const selPlat = document.getElementById('ddPlat').value;
 
   let filtered = allRows;
