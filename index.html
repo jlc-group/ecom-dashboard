@@ -584,7 +584,7 @@ input[type=number]{-moz-appearance:textfield;}
         <th style="min-width:100px">GMV Live</th>
         <th style="min-width:100px">COGS</th>
         <th style="min-width:90px">Promo</th>
-        <th style="min-width:80px">Free</th>
+        <th style="min-width:80px">Platform</th>
         <th style="min-width:80px">KOL</th>
         <th style="min-width:100px">Prod Live</th>
         <th style="min-width:110px">Comm Creator</th>
@@ -618,7 +618,7 @@ input[type=number]{-moz-appearance:textfield;}
         <th style="min-width:70px">Orders</th>
         <th style="min-width:100px">COGS</th>
         <th style="min-width:90px">Promo</th>
-        <th style="min-width:80px">Free</th>
+        <th style="min-width:80px">Platform</th>
         <th style="min-width:110px">Comm Creator</th>
         <th style="min-width:90px">Plat Fee</th>
         <th style="min-width:80px">SP ADS</th>
@@ -656,7 +656,7 @@ input[type=number]{-moz-appearance:textfield;}
         <th style="min-width:100px">Organic GMV</th>
         <th style="min-width:100px">COGS</th>
         <th style="min-width:90px">Promo</th>
-        <th style="min-width:80px">Free</th>
+        <th style="min-width:80px">Platform</th>
         <th style="min-width:110px">Comm Creator</th>
         <th style="min-width:90px">Plat Fee</th>
         <th style="min-width:80px">LZSD</th>
@@ -1272,26 +1272,29 @@ const PLAT_FIELDS = {
     {k:'date',t:'date'},{k:'brand',t:'brand'},
     {k:'gmv',t:'n'},{k:'orders',t:'n'},
     {k:'saleAds',t:'n'},{k:'organic',t:'c'},{k:'gmvLive',t:'n'},
-    {k:'cogs',t:'c'},{k:'promo',t:'n'},{k:'free',t:'n'},
+    {k:'cogs',t:'c'},{k:'promo',t:'n'},
     {k:'kol',t:'n'},{k:'prodLive',t:'n'},{k:'commCreator',t:'n'},
     {k:'costGmvAds',t:'n'},{k:'costGmvLive',t:'n'},
+    {k:'free',t:'c'},
     // calculated
     {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
   ],
   sp: [
     {k:'date',t:'date'},{k:'brand',t:'brand'},
     {k:'gmv',t:'n'},{k:'orders',t:'n'},
-    {k:'cogs',t:'c'},{k:'promo',t:'n'},{k:'free',t:'n'},{k:'commCreator',t:'n'},
+    {k:'cogs',t:'c'},{k:'promo',t:'n'},{k:'commCreator',t:'n'},
     {k:'platFee',t:'n'},{k:'spAds',t:'n'},{k:'fbCpas',t:'n'},
     {k:'affiliate',t:'n'},{k:'searchAds',t:'n'},{k:'shopAds',t:'n'},{k:'productAds',t:'n'},
+    {k:'free',t:'c'},
     {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
   ],
   lz: [
     {k:'date',t:'date'},{k:'brand',t:'brand'},
     {k:'gmv',t:'n'},{k:'orders',t:'n'},
-    {k:'organic',t:'n'},{k:'cogs',t:'c'},{k:'promo',t:'n'},{k:'free',t:'n'},
+    {k:'organic',t:'n'},{k:'cogs',t:'c'},{k:'promo',t:'n'},
     {k:'commCreator',t:'n'},{k:'platFee',t:'n'},
     {k:'lzsd',t:'n'},{k:'lzGmvMax',t:'n'},{k:'affLz',t:'n'},
+    {k:'free',t:'c'},
     {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
   ]
 };
@@ -1301,31 +1304,34 @@ function calcRow(plat, r) {
   const n = k => parseFloat(r[k]||0)||0;
   if(plat==='tt'){
     const cogs = n('gmv') * 0.3;
+    const free = n('gmv') * 0.25;
     const organic = n('gmv') - n('saleAds');
-    const totalExp = cogs+n('promo')+n('free')+n('kol')+n('prodLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
+    const totalExp = cogs+n('promo')+free+n('kol')+n('prodLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
     const nm = n('gmv') - totalExp;
     const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
     const adsTotal = n('costGmvAds')+n('costGmvLive');
     const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
-    return {...r, cogs, organic, totalExp, nm, nmPct, roas};
+    return {...r, cogs, free, organic, totalExp, nm, nmPct, roas};
   }
   if(plat==='sp'){
     const cogs = n('gmv') * 0.3;
-    const totalExp = cogs+n('promo')+n('free')+n('commCreator')+n('platFee')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
+    const free = n('gmv') * 0.25;
+    const totalExp = cogs+n('promo')+free+n('commCreator')+n('platFee')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
     const nm = n('gmv') - totalExp;
     const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
     const adsTotal = n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
     const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
-    return {...r, cogs, totalExp, nm, nmPct, roas};
+    return {...r, cogs, free, totalExp, nm, nmPct, roas};
   }
   if(plat==='lz'){
     const cogs = n('gmv') * 0.3;
-    const totalExp = cogs+n('promo')+n('free')+n('commCreator')+n('platFee')+n('lzsd')+n('lzGmvMax')+n('affLz');
+    const free = n('gmv') * 0.25;
+    const totalExp = cogs+n('promo')+free+n('commCreator')+n('platFee')+n('lzsd')+n('lzGmvMax')+n('affLz');
     const nm = n('gmv') - totalExp;
     const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
     const adsTotal = n('lzsd')+n('lzGmvMax')+n('affLz');
     const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
-    return {...r, cogs, totalExp, nm, nmPct, roas};
+    return {...r, cogs, free, totalExp, nm, nmPct, roas};
   }
   return r;
 }

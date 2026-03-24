@@ -1292,9 +1292,9 @@ app.get('/api/line/schedule', async (req, res) => {
     // MK cost calculator (ไม่รวม cogs, plat_fee — for MK%)
     function calcTotalCost(r){
       var n = function(k){ return parseFloat(r[k])||0; };
-      if(r._plat==='tt') return n('promo')+n('free')+n('kol')+n('prod_live')+n('comm_creator')+n('cost_gmv_ads')+n('cost_gmv_live');
-      if(r._plat==='sp') return n('promo')+n('free')+n('comm_creator')+n('sp_ads')+n('fb_cpas')+n('affiliate')+n('search_ads')+n('shop_ads')+n('product_ads');
-      if(r._plat==='lz') return n('promo')+n('free')+n('comm_creator')+n('lzsd')+n('lz_gmv_max')+n('aff_lz');
+      if(r._plat==='tt') return n('promo')+n('kol')+n('prod_live')+n('comm_creator')+n('cost_gmv_ads')+n('cost_gmv_live');
+      if(r._plat==='sp') return n('promo')+n('comm_creator')+n('sp_ads')+n('fb_cpas')+n('affiliate')+n('search_ads')+n('shop_ads')+n('product_ads');
+      if(r._plat==='lz') return n('promo')+n('comm_creator')+n('lzsd')+n('lz_gmv_max')+n('aff_lz');
       return 0;
     }
 
