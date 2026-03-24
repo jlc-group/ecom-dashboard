@@ -100,7 +100,7 @@ select option{background:var(--surface2);color:var(--text);}
 /* ============================
    SPREADSHEET INPUT GRID
    ============================ */
-.sheet-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);}
+.sheet-wrap{overflow:auto;border-radius:10px;border:1px solid var(--border);max-height:80vh;}
 .sheet-table{border-collapse:collapse;width:100%;min-width:max-content;}
 .sheet-table th{
   background:#12152a;color:var(--muted);font-size:10px;font-weight:600;
@@ -587,7 +587,6 @@ input[type=number]{-moz-appearance:textfield;}
         <th style="min-width:80px">Free</th>
         <th style="min-width:80px">KOL</th>
         <th style="min-width:100px">Prod Live</th>
-        <th style="min-width:100px">Comm Live</th>
         <th style="min-width:110px">Comm Creator</th>
         <th style="min-width:110px">Cost GMV Ads</th>
         <th style="min-width:110px">Cost GMV Live</th>
@@ -1270,9 +1269,9 @@ const PLAT_FIELDS = {
   tt: [
     {k:'date',t:'date'},{k:'brand',t:'brand'},
     {k:'gmv',t:'n'},{k:'orders',t:'n'},
-    {k:'saleAds',t:'n'},{k:'organic',t:'n'},{k:'gmvLive',t:'n'},
+    {k:'saleAds',t:'n'},{k:'organic',t:'c'},{k:'gmvLive',t:'n'},
     {k:'cogs',t:'n'},{k:'promo',t:'n'},{k:'free',t:'n'},
-    {k:'kol',t:'n'},{k:'prodLive',t:'n'},{k:'commLive',t:'n'},{k:'commCreator',t:'n'},
+    {k:'kol',t:'n'},{k:'prodLive',t:'n'},{k:'commCreator',t:'n'},
     {k:'costGmvAds',t:'n'},{k:'costGmvLive',t:'n'},
     // calculated
     {k:'totalExp',t:'c'},{k:'nm',t:'c'},{k:'nmPct',t:'cp'},{k:'roas',t:'cx'}
@@ -1299,12 +1298,13 @@ const PLAT_FIELDS = {
 function calcRow(plat, r) {
   const n = k => parseFloat(r[k]||0)||0;
   if(plat==='tt'){
-    const totalExp = n('cogs')+n('promo')+n('free')+n('kol')+n('prodLive')+n('commLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
+    const organic = n('gmv') - n('saleAds');
+    const totalExp = n('cogs')+n('promo')+n('free')+n('kol')+n('prodLive')+n('commCreator')+n('costGmvAds')+n('costGmvLive');
     const nm = n('gmv') - totalExp;
     const nmPct = n('gmv')>0 ? nm/n('gmv')*100 : 0;
     const adsTotal = n('costGmvAds')+n('costGmvLive');
     const roas = adsTotal>0 ? n('gmv')/adsTotal : 0;
-    return {...r, totalExp, nm, nmPct, roas};
+    return {...r, organic, totalExp, nm, nmPct, roas};
   }
   if(plat==='sp'){
     const totalExp = n('cogs')+n('promo')+n('free')+n('commCreator')+n('platFee')+n('spAds')+n('fbCpas')+n('affiliate')+n('searchAds')+n('shopAds')+n('productAds');
