@@ -1375,8 +1375,8 @@ async function loadDB(){
         DB = data;
       }
     } catch(e) {
-      console.error('loadDB API error:', e);
-      showToast('⚠️ โหลดจาก API ไม่ได้ — ใช้ข้อมูล local แทน');
+      console.error('loadDB API error:', e, 'status:', e.message);
+      showToast('⚠️ โหลดจาก API ไม่ได้: ' + (e.message||e) + ' — ใช้ข้อมูล local แทน');
       // Fallback to localStorage
       try {
         const saved = localStorage.getItem('ecom_db');
