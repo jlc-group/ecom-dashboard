@@ -4,7 +4,11 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+// ให้ pg คืน DATE เป็น string "YYYY-MM-DD" แทน JS Date object
+types.setTypeParser(1082, function(val){ return val; }); // DATE
+types.setTypeParser(1114, function(val){ return val; }); // TIMESTAMP
+types.setTypeParser(1184, function(val){ return val; }); // TIMESTAMPTZ
 const path    = require('path');
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
