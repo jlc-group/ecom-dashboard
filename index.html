@@ -4157,35 +4157,60 @@ function getEmployees(){
 
 // หา employee object ที่ตรงกับ CURRENT_USER (ทั้ง local mode และ GAS mode)
 function getMyEmployee(){
-  if(!CURRENT_USER) return null;
   const emps = DB.employees||[];
-  // ตรงชื่อ
-  let found = emps.find(e=>e.name && e.name===CURRENT_USER);
+  let curr = (CURRENT_USER || '').trim().toLowerCase();
+  
+  // 1. ลองหาจาก name หรือ email ตรงๆ ก่อน
+  let found = emps.find(e => 
+    (e.name && e.name.trim().toLowerCase() === curr) || 
+    (e.email && e.email.trim().toLowerCase() === curr)
+  );
   if(found) return found;
-  // ตรง email (ใช้ CURRENT_USER เป็น email)
-  found = emps.find(e=>e.email && e.email.toLowerCase()===CURRENT_USER.toLowerCase());
-  if(found) return found;
-  // fallback: ใช้ email จาก sessionStorage (กรณีชื่อเปลี่ยนแต่ session ยังเก่า)
-  const savedEmail = sessionStorage.getItem('ecom_user_email');
+
+  // 2. ถ้ามาจาก Google OAuth ลองหาจาก email ใน sessionStorage เป็นไม้ตายสุดท้าย
+  const savedEmail = (sessionStorage.getItem('ecom_user_email') || '').trim().toLowerCase();
   if(savedEmail){
-    found = emps.find(e=>e.email && e.email.toLowerCase()===savedEmail.toLowerCase());
+    found = emps.find(e => e.email && e.email.trim().toLowerCase() === savedEmail);
     if(found){
-      // resync CURRENT_USER ให้ตรงกับชื่อปัจจุบัน
+      // ถ้าเปราะบางถึงขั้นนี้ ต้อง Sync ชื่อกลับให้เป็นชื่อจาก DB เสมอ
       CURRENT_USER = found.name;
-      sessionStorage.setItem('ecom_user', found.name);
+      try { sessionStorage.setItem('ecom_user', found.name); } catch(e){}
       return found;
     }
   }
+
+  // 3. Fallback: ถ้าชื่อใน UI ถูกบังคับให้เป็น Google Name (เช่น Anuttara Pumpakdee) 
+  // แต่ใน DB ไม่มี ให้ใช้ logic เบลอๆ คือตรวจสอบ substring
+  if(curr){
+    found = emps.find(e => 
+      e.name && (e.name.toLowerCase().includes(curr) || curr.includes(e.name.toLowerCase()))
+    );
+    if(found) return found;
+  }
+  
   return null;
 }
 
 // เช็คว่า user ปัจจุบันเป็น Admin หรือเปล่า
 function isAdminUser(){
+  // ถ้า login มาเป็น Admin จาก JWT เลยให้เชื่อ JWT ด้วย (ลดปัญหา employee DB โหลดช้า)
+  let userIsAdminViaJWT = false;
+  try {
+    const token = sessionStorage.getItem('ecom_token');
+    if(token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if(payload.isAdmin === true) userIsAdminViaJWT = true;
+    }
+  } catch(e){}
+
   if(!CURRENT_USER) return true; // ถ้ายังไม่ได้เลือก user ให้เห็นทั้งหมด (local mode)
   const me = getMyEmployee();
-  // ถ้าไม่เจอใน employee list → ไม่ใช่ admin (ป้องกันคนที่ยังไม่ได้รับอนุมัติเห็น task ทั้งหมด)
-  if(!me) return false;
-  return me.isAdmin === true;
+  
+  // ให้สิทธิ์ Admin ทะลุทะลวง
+  if(me && me.isAdmin) return true;
+  if(userIsAdminViaJWT) return true;
+  
+  return false;
 }
 
 // ดึงชื่อพนักงานของ user ปัจจุบัน
