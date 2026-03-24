@@ -1117,6 +1117,18 @@ app.get('/api/audit', requireAuth, async (req, res) => {
   res.json(rows.map(rowToCamel));
 });
 
+// DELETE /api/audit — ล้าง Audit Log ทั้งหมด
+app.delete('/api/audit', requireAuth, async (req, res) => {
+  try {
+    await pool.query('TRUNCATE TABLE audit_log');
+    console.log('[AUDIT] Cleared all audit logs by:', req.headers['x-user']||'unknown');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[AUDIT] Clear error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================
 // APM Tasks CRUD
 // ============================================================

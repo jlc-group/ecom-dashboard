@@ -4319,10 +4319,25 @@ function renderAudit(){
 
 function confirmClearAudit(){
   if(confirm('ต้องการล้าง Audit Log ทั้งหมดหรือไม่? ไม่สามารถกู้คืนได้')){
-    DB.auditLog = [];
-    saveDB();
-    renderAudit();
-    showToast('🗑 ล้าง Audit Log แล้ว');
+    if(IS_API){
+      apiFetch(API_BASE + '/api/audit', { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+          if(data.success){
+            DB.auditLog = [];
+            renderAudit();
+            showToast('🗑 ล้าง Audit Log แล้ว');
+          } else {
+            showToast('❌ ล้างไม่ได้: ' + (data.error||''));
+          }
+        })
+        .catch(e => showToast('❌ Error: ' + e.message));
+    } else {
+      DB.auditLog = [];
+      saveDB();
+      renderAudit();
+      showToast('🗑 ล้าง Audit Log แล้ว');
+    }
   }
 }
 
