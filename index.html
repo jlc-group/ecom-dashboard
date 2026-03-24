@@ -514,6 +514,20 @@ input[type=number]{-moz-appearance:textfield;}
         <tbody id="allUsersTable"></tbody>
       </table>
     </div>
+    <!-- ADMIN: Recovery (Time Machine) -->
+    <div class="card" id="adminRecoveryCard" style="display:none; border-color:var(--danger);">
+      <div class="card-title" style="color:var(--danger)">⏪ กู้คืนข้อมูล (Time Machine)
+        <button class="btn btn-ghost btn-sm" onclick="loadHistory()">🔄 รีเฟรชประวัติ</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+        ระบบจะ Auto-Backup ข้อมูลทุกครั้งที่มีการ Save ใหญ่ (เก็บย้อนหลังสูงสุด 100 ครั้ง)<br>
+        หากข้อมูลหาย/โดนเซฟทับ สามารถกดกู้คืนจากจุดนี้ได้
+      </div>
+      <table class="user-mgmt-table">
+        <thead><tr><th>รหัส Snapshot</th><th>เวลาบันทึก (เวลาไทย)</th><th>ผู้บันทึก</th><th>การจัดการ</th></tr></thead>
+        <tbody id="historyTable"></tbody>
+      </table>
+    </div>
   </div>
   <div style="margin-top:14px;">
     <div class="card">
@@ -1437,6 +1451,7 @@ async function saveDB(){
       const result = await resp.json();
       if(result.success){
         setSaveStatus('ok','✅ บันทึกแล้ว');
+        _draftDirty = false; // รีเซ็ต Draft State
       } else {
         throw new Error(result.error || 'Unknown error');
       }
@@ -1601,6 +1616,8 @@ async function initApp(){
 
 async function autoSaveAPI(){
   if(!IS_API) return;
+  if(!_draftDirty) return; // 🛡️ Smart Auto-save: ถ้าไม่มีการแก้ข้อมูลในหน้านี้ จะไม่ส่ง API ไปทับ DB เด็ดขาด
+  
   // Sync sheet data from DOM
   ['tt','sp','lz'].forEach(plat=>{
     const tbody=document.getElementById('tbody-'+plat);
@@ -1632,7 +1649,10 @@ async function autoSaveAPI(){
       method: 'PUT',
       body: JSON.stringify(DB)
     });
-    if(resp.ok) setSaveStatus('ok','✅ Auto-saved');
+    if(resp.ok) {
+      setSaveStatus('ok','✅ Auto-saved');
+      _draftDirty = false; // รีเซ็ตสถานะ draft หลังจาก save เสร็จ
+    }
     else throw new Error('HTTP ' + resp.status);
   } catch(e) {
     console.warn('autoSaveAPI failed:', e);
@@ -4731,8 +4751,16 @@ async function loadUserManagement(){
       }
     } catch(e){}
   }
-  if(!isAdmin){ card.style.display = 'none'; return; }
+  if(!isAdmin){ 
+    card.style.display = 'none'; 
+    if(document.getElementById('adminRecoveryCard')) document.getElementById('adminRecoveryCard').style.display = 'none';
+    return; 
+  }
   card.style.display = 'block';
+  if(document.getElementById('adminRecoveryCard')) {
+    document.getElementById('adminRecoveryCard').style.display = 'block';
+    loadHistory(); // Load history when admin tab opens
+  }
 
   try {
     // Load pending users
@@ -5111,6 +5139,60 @@ async function adminDeleteUser(userId, name){
     }
   } catch(e){
     showToast('❌ ' + e.message);
+  }
+}
+
+// ============================================================
+// ADMIN: Recovery (Time Machine)
+// ============================================================
+
+async function loadHistory(){
+  var tbody = document.getElementById('historyTable');
+  if(!tbody) return;
+  try {
+    var res = await apiFetch(API_BASE + '/api/admin/history');
+    var data = await res.json();
+    tbody.innerHTML = '';
+    if(data.length === 0){
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">ไม่มีประวัติการบันทึก</td></tr>';
+      return;
+    }
+    data.forEach(function(row){
+      var tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>#${row.id}</td>
+        <td>${row.created_str}</td>
+        <td>${row.saved_by || '-'}</td>
+        <td>
+          <button class="btn btn-danger btn-sm" onclick="restoreSnapshot(${row.id}, '${row.created_str}')">⏪ กู้คืนข้อมูลนี้</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch(e){
+    console.error('loadHistory error:', e);
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--danger)">โหลดข้อมูลไม่ได้</td></tr>';
+  }
+}
+
+async function restoreSnapshot(id, dateStr){
+  if(!confirm('⚠️ คำเตือน!\nคุณกำลังจะกู้คืนข้อมูลทั้งหมดของทุกแพลตฟอร์ม กลับไปเป็นสถานะของ: ' + dateStr + '\n\nข้อมูลใหม่กว่านั้นจะ หายไปทั้งหมด ยืนยันไหม?')) return;
+  try {
+    showLoadingOverlay(true, 'กำลังกู้คืนข้อมูล...', 'กรุณารอสักครู่');
+    var res = await apiFetch(API_BASE + '/api/admin/restore', {
+      method: 'POST',
+      body: JSON.stringify({ id: id })
+    });
+    var data = await res.json();
+    if(data.success){
+      showToast('✅ กู้คืนข้อมูลสำเร็จ!');
+      setTimeout(() => location.reload(), 1500); // รีเฟรชหน้าเพื่อโหลดข้อมูลใหม่ทั้งหมด
+    } else {
+      throw new Error(data.error || 'เกิดข้อผิดพลาด');
+    }
+  } catch(e) {
+    showLoadingOverlay(false);
+    alert('❌ การกู้คืนล้มเหลว: ' + e.message);
   }
 }
 

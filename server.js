@@ -382,6 +382,70 @@ app.post('/api/admin/set-editable-tabs', requireAuth, async function(req, res) {
   }
 });
 
+// ============================================================
+// ADMIN RECOVERY (Time Machine)
+// ============================================================
+
+// GET /api/admin/history — List recent backups
+app.get('/api/admin/history', requireAuth, async (req, res) => {
+  try {
+    // Only admins should see this, but we'll enforce in UI for now
+    var { rows } = await pool.query(`
+      SELECT id, TO_CHAR(created_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD HH24:MI:SS') as created_str, saved_by 
+      FROM history_snapshots ORDER BY id DESC LIMIT 50
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/restore — Restore a snapshot
+app.post('/api/admin/restore', requireAuth, async (req, res) => {
+  const snapshotId = req.body.id;
+  if (!snapshotId) return res.status(400).json({ error: 'Snapshot ID required' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // ดึง Snapshot
+    var { rows } = await client.query('SELECT platform_data FROM history_snapshots WHERE id = $1', [snapshotId]);
+    if (rows.length === 0) throw new Error('Snapshot not found');
+    
+    var data = rows[0].platform_data;
+    if (typeof data === 'string') data = JSON.parse(data);
+
+    // ล้างข้อมูลและ Restore รวดเดียว
+    for (const plat of ['tt', 'sp', 'lz']) {
+      if (!data[plat] || !Array.isArray(data[plat])) continue;
+      const table = TABLE_MAP[plat];
+      const cols = PLAT_COLS[plat];
+      
+      await client.query('DELETE FROM ' + table); // ล้างของเดิม
+      
+      if (data[plat].length > 0) {
+        const ph = makePH(cols.length);
+        for (const row of data[plat]) {
+          const snake = rowToSnake(row);
+          // if it's already snake, great, just map it.
+          // Wait, 'date' inside JSON could be Date object string. We just insert it directly.
+          // Because rowToSnake preserves keys, and cleanVal handles standard casts.
+          const vals = cols.map(c => cleanVal(c, snake[c]));
+          await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    console.log('[RESTORE] Admin restored snapshot #', snapshotId);
+    res.json({ success: true, restoredId: snapshotId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[RESTORE] error:', err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/auth/me — verify JWT, return user info (ต้องเป็น approved เท่านั้น)
 app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
@@ -747,14 +811,37 @@ app.put('/api/data', requireAuth, async (req, res) => {
       }
     }
 
-    // --- Backup ก่อน DELETE ---
+    // --- Auto Backup History (Time Machine) ---
+    // สร้างตารางประวัติการบันทึก หากยังไม่มี (เก็บเป็น JSONB เพื่อประหยัดพื้นที่และ query ง่าย)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS history_snapshots (
+        id SERIAL PRIMARY KEY,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        saved_by TEXT,
+        platform_data JSONB
+      )
+    `).catch(e => console.error('Create history table error:', e));
+
+    var backupData = {};
     for (const plat of ['tt', 'sp', 'lz']) {
       if (!Array.isArray(db[plat])) continue;
       const table = TABLE_MAP[plat];
-      const bkTable = table + '_backup';
-      await client.query('CREATE TABLE IF NOT EXISTS ' + bkTable + ' (LIKE ' + table + ' INCLUDING ALL)').catch(function(){});
-      await client.query('DELETE FROM ' + bkTable).catch(function(){});
-      await client.query('INSERT INTO ' + bkTable + ' SELECT * FROM ' + table).catch(function(){});
+      try {
+        var resBk = await client.query('SELECT * FROM ' + table);
+        if (resBk.rows.length > 0) backupData[plat] = resBk.rows;
+      } catch(e) { console.error('Backup snapshot err for', plat, e); }
+    }
+    
+    // บันทึก Snapshot ลง DB (จำกัดให้เก็บไว้แค่ 100 snapshot ล่าสุด เพื่อไม่ให้ DB บวม)
+    if (Object.keys(backupData).length > 0) {
+      const savedBy = req.user?.name || req.headers['x-user'] || 'unknown';
+      await client.query(
+        'INSERT INTO history_snapshots (saved_by, platform_data) VALUES ($1, $2)',
+        [savedBy, JSON.stringify(backupData)]
+      ).catch(e => console.error('Insert snapshot err:', e));
+      
+      // Cleanup snapshots เก่าที่เกิน 100 รายการ
+      await client.query('DELETE FROM history_snapshots WHERE id NOT IN (SELECT id FROM history_snapshots ORDER BY id DESC LIMIT 100)').catch(()=>{});
     }
 
     // --- Platform data DELETE + re-insert ---
