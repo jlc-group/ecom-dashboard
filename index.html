@@ -1585,15 +1585,19 @@ async function autoSaveAPI(){
   const empTbody = document.getElementById('empConfigTable');
   if(empTbody && empTbody.children.length > 0){
     const rows = empTbody.querySelectorAll('tr');
+    // สร้าง map จาก email → canView เพื่อ match ที่ถูกต้อง (ไม่ใช้ index)
+    const oldCanViewMap = {};
+    (DB.employees||[]).forEach(e=>{
+      if(e.email) oldCanViewMap[e.email.toLowerCase()] = e.canView || [];
+    });
     const emps = [];
-    rows.forEach((tr,idx)=>{
+    rows.forEach((tr)=>{
       const name = tr.querySelector('[data-field="name"]')?.value?.trim();
       const email = tr.querySelector('[data-field="email"]')?.value?.trim();
       const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
       const note = tr.querySelector('[data-field="note"]')?.value?.trim();
       const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
-      const oldEmp = (DB.employees||[])[idx];
-      const canView = oldEmp?.canView || [];
+      const canView = email ? (oldCanViewMap[email.toLowerCase()] || []) : [];
       if(name) emps.push({name, email, brands, note, isAdmin, canView});
     });
     if(emps.length > 0) DB.employees = emps;
