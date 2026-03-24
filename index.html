@@ -4038,7 +4038,14 @@ async function saveAPM(silent){
 }
 
 function renderAPMSummary(tasks){
-  const emps = getEmployees();
+  let emps = getEmployees();
+  // non-admin: แสดง card เฉพาะตัวเอง + canView
+  if(!isAdminUser()){
+    const me = getMyEmployee();
+    const myName = me?.name||'';
+    const canView = me?.canView||[];
+    emps = emps.filter(e => e.name===myName || canView.includes(e.name));
+  }
   const cont = document.getElementById('apmSummary');
   if(!cont) return;
   cont.innerHTML = emps.map((emp,i)=>{
@@ -4102,7 +4109,7 @@ function renderAPM(){
   }
 
   const monthVal = document.getElementById('selMonth').value;
-  const filterEmp = (amAdmin ? empFilter?.value : myName) || 'all';
+  const filterEmp = empFilter?.value || 'all';
   const filterStatus = document.getElementById('apmFilterStatus')?.value||'all';
   const filterBrand = bFilter?.value||'all';
 
