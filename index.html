@@ -101,6 +101,11 @@ select option{background:var(--surface2);color:var(--text);}
    SPREADSHEET INPUT GRID
    ============================ */
 .sheet-wrap{overflow:auto;border-radius:10px;border:1px solid var(--border);max-height:80vh;}
+/* แยกโซน scroll กับแถว TOTAL — ให้เห็นรวมใต้ตารางโดยไม่ต้องเลื่อนสุด */
+.sheet-wrap-split{display:flex;flex-direction:column;max-height:80vh;border-radius:10px;border:1px solid var(--border);overflow:hidden;}
+.sheet-scroll-inner{overflow:auto;flex:1 1 auto;min-height:120px;max-height:calc(80vh - 52px);}
+.sheet-total-footer{flex:0 0 auto;border-top:2px solid var(--accent);background:var(--surface2);overflow-x:auto;}
+.sheet-total-footer .sheet-table{margin:0;}
 .sheet-table{border-collapse:collapse;width:100%;min-width:max-content;}
 .sheet-table th{
   background:#12152a;color:var(--muted);font-size:10px;font-weight:600;
@@ -572,7 +577,8 @@ input[type=number]{-moz-appearance:textfield;}
     </div>
     <div style="font-size:11px;color:var(--muted);" id="tt-rowcount"></div>
   </div>
-  <div class="sheet-wrap">
+  <div class="sheet-wrap sheet-wrap-split">
+    <div class="sheet-scroll-inner">
     <table class="sheet-table" id="sheet-tt">
       <thead><tr>
         <th class="rn">#</th>
@@ -597,6 +603,12 @@ input[type=number]{-moz-appearance:textfield;}
       </tr></thead>
       <tbody id="tbody-tt"></tbody>
     </table>
+    </div>
+    <div class="sheet-total-footer" aria-label="ยอดรวมเดือน">
+      <table class="sheet-table" id="sheet-tt-total">
+        <tbody id="tbody-tt-total"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -609,7 +621,8 @@ input[type=number]{-moz-appearance:textfield;}
     </div>
     <div style="font-size:11px;color:var(--muted);" id="sp-rowcount"></div>
   </div>
-  <div class="sheet-wrap">
+  <div class="sheet-wrap sheet-wrap-split">
+    <div class="sheet-scroll-inner">
     <table class="sheet-table" id="sheet-sp">
       <thead><tr>
         <th class="rn">#</th>
@@ -634,6 +647,12 @@ input[type=number]{-moz-appearance:textfield;}
       </tr></thead>
       <tbody id="tbody-sp"></tbody>
     </table>
+    </div>
+    <div class="sheet-total-footer" aria-label="ยอดรวมเดือน">
+      <table class="sheet-table" id="sheet-sp-total">
+        <tbody id="tbody-sp-total"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -646,7 +665,8 @@ input[type=number]{-moz-appearance:textfield;}
     </div>
     <div style="font-size:11px;color:var(--muted);" id="lz-rowcount"></div>
   </div>
-  <div class="sheet-wrap">
+  <div class="sheet-wrap sheet-wrap-split">
+    <div class="sheet-scroll-inner">
     <table class="sheet-table" id="sheet-lz">
       <thead><tr>
         <th class="rn">#</th>
@@ -669,6 +689,12 @@ input[type=number]{-moz-appearance:textfield;}
       </tr></thead>
       <tbody id="tbody-lz"></tbody>
     </table>
+    </div>
+    <div class="sheet-total-footer" aria-label="ยอดรวมเดือน">
+      <table class="sheet-table" id="sheet-lz-total">
+        <tbody id="tbody-lz-total"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -2057,14 +2083,21 @@ function renderSheet(plat, rows){
   renderTotalRow(plat, rows);
 }
 
-// แถว TOTAL — รวมค่าทุก column ใต้แถวสุดท้าย
+// แถว TOTAL — รวมค่าทุก column แสดงใต้ตาราง (โซน sheet-total-footer ไม่เลื่อนหาย)
 function renderTotalRow(plat, rows){
   const tbody = document.getElementById('tbody-'+plat);
-  if(!tbody) return;
-  // ลบ total row เก่า (ถ้ามี)
-  const old = tbody.querySelector('tr.total-row');
-  if(old) old.remove();
+  const footTbody = document.getElementById('tbody-'+plat+'-total');
+  const footWrap = footTbody ? footTbody.closest('.sheet-total-footer') : null;
+  if(tbody){
+    const oldMain = tbody.querySelector('tr.total-row');
+    if(oldMain) oldMain.remove();
+  }
+  if(footTbody) footTbody.innerHTML = '';
+  if(footWrap) footWrap.style.display = (!rows || rows.length === 0) ? 'none' : '';
   if(!rows || rows.length === 0) return;
+
+  const target = footTbody || tbody;
+  if(!target) return;
 
   const fields = PLAT_FIELDS[plat];
   // คำนวณ calcRow ให้ทุกแถว แล้วรวม
@@ -2090,10 +2123,11 @@ function renderTotalRow(plat, rows){
 
   const tr = document.createElement('tr');
   tr.className = 'total-row';
-  tr.style.cssText = 'background:var(--surface2);border-top:2px solid var(--accent);font-weight:700;position:sticky;bottom:0;z-index:2;';
+  tr.style.cssText = 'background:var(--surface2);font-weight:700;';
 
   // Row number cell
   const tdN = document.createElement('td');
+  tdN.className = 'rn';
   tdN.style.cssText = 'padding:4px 6px;color:var(--accent);font-weight:800;font-size:11px;';
   tdN.textContent = 'TOTAL';
   tr.appendChild(tdN);
@@ -2119,7 +2153,7 @@ function renderTotalRow(plat, rows){
     tr.appendChild(td);
   });
 
-  tbody.appendChild(tr);
+  target.appendChild(tr);
 }
 
 function renderRow(plat, r={}, idx){
@@ -2240,6 +2274,7 @@ function recalcAll(){
     document.querySelectorAll(`#tbody-${plat} tr[data-row]`).forEach(tr=>{
       recalcRow(tr,plat);
     });
+    updateTotalRowFromDOM(plat);
   });
 }
 
@@ -2247,6 +2282,7 @@ function addRow(plat){
   const tbody = document.getElementById('tbody-'+plat);
   const idx = tbody.querySelectorAll('tr[data-row]').length;
   renderRow(plat, {}, idx);
+  updateTotalRowFromDOM(plat);
 }
 
 function clearEmpty(plat){
@@ -2256,6 +2292,7 @@ function clearEmpty(plat){
     if(!gmv || !gmv.value || gmv.value==='0') tr.remove();
   });
   reindex(plat);
+  updateTotalRowFromDOM(plat);
 }
 
 function reindex(plat){
@@ -4614,6 +4651,7 @@ function genMonthRows(plat){
     tbody.appendChild(tr);
     const label = document.getElementById(`${plat}-rowcount`);
     if(label) label.textContent = '';
+    renderTotalRow(plat, []);
     updateBrandLabels();
     return;
   }
@@ -4634,6 +4672,7 @@ function genMonthRows(plat){
   const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   if(label) label.textContent = `${thMonths[month]} ${year+543} — ${days} วัน`;
 
+  updateTotalRowFromDOM(plat);
   updateBrandLabels();
 }
 
