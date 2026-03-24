@@ -1669,6 +1669,10 @@ function clearDraft(){
 // Restore draft ถ้ามี — เรียกหลัง loadDB
 function checkAndRestoreDraft(){
   if(!IS_API) return;
+  // ลบ draft เก่าทิ้งเลย — ใช้ข้อมูลจาก DB เป็นหลักเสมอ (ป้องกัน data เพี้ยน)
+  try { localStorage.removeItem('ecom_db_draft'); } catch(e){}
+  return;
+  // === DISABLED: draft recovery dialog ด้านล่างถูกปิดไว้ ===
   try {
     const raw = localStorage.getItem('ecom_db_draft'); // FIX: ต้องดึงของ api
     if(!raw) return;
