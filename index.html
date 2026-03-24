@@ -3895,20 +3895,29 @@ async function saveViewPerm(){
   const me = emps[_permEmpIdx];
   if(!me) return;
   const checked = document.querySelectorAll('#permCheckList input[type=checkbox]:checked');
-  me.canView = Array.from(checked).map(cb=>cb.value);
-  // ใช้ PUT /api/employees โดยตรง — ไม่ผ่าน saveDB() เพื่อป้องกัน stale overwrite
+  const newCanView = Array.from(checked).map(cb=>cb.value);
+  // อัพเดตในหน่วยความจำ
+  me.canView = newCanView;
+  // ใช้ dedicated endpoint — ส่งแค่ email + canView ป้องกัน race condition
   if(IS_API){
     try {
       setSaveStatus('saving','⏳ กำลังบันทึก...');
-      const resp = await apiFetch(API_BASE + '/api/employees', {
+      const resp = await apiFetch(API_BASE + '/api/employees/canview', {
         method: 'PUT',
-        body: JSON.stringify({employees: emps})
+        body: JSON.stringify({email: me.email, canView: newCanView})
       });
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
-      setSaveStatus('ok','✅ บันทึกแล้ว');
+      const data = await resp.json();
+      if(data.success){
+        setSaveStatus('ok','✅ บันทึกแล้ว');
+      } else {
+        throw new Error(data.error||'Unknown error');
+      }
     } catch(e){
       console.error('saveViewPerm error:', e);
-      setSaveStatus('err','❌ บันทึกไม่ได้');
+      setSaveStatus('err','❌ บันทึกไม่ได้: '+e.message);
+      showToast('❌ บันทึกสิทธิ์ไม่ได้: '+e.message);
+      return;
     }
   } else {
     await saveDB();

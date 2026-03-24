@@ -954,6 +954,25 @@ app.put('/api/employees', requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/employees/canview — อัพเดต can_view เฉพาะคนเดียว (ป้องกัน race condition)
+app.put('/api/employees/canview', requireAuth, async (req, res) => {
+  try {
+    const { email, canView } = req.body;
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const cvStr = Array.isArray(canView) ? canView.join(',') : (canView || '');
+    const result = await pool.query(
+      'UPDATE employees SET can_view = $1 WHERE LOWER(email) = LOWER($2)',
+      [cvStr, email]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'employee not found' });
+    console.log('[PERM] Updated can_view for', email, '→', cvStr.substring(0, 60));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PERM] canview error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================
 // Platform data CRUD — generic per platform
 // ============================================================
