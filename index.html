@@ -105,7 +105,7 @@ select option{background:var(--surface2);color:var(--text);}
 .sheet-wrap-split{display:flex;flex-direction:column;max-height:80vh;border-radius:10px;border:1px solid var(--border);overflow:hidden;}
 .sheet-scroll-inner{overflow:auto;flex:1 1 auto;min-height:120px;max-height:calc(80vh - 52px);}
 .sheet-total-footer{flex:0 0 auto;border-top:2px solid var(--accent);background:var(--surface2);overflow-x:auto;}
-.sheet-total-footer .sheet-table{margin:0;}
+.sheet-total-footer .sheet-table{margin:0;width:auto!important;/* ไม่ยืด 100% — ความกว้างซิงค์กับตารางหลัก */ }
 .sheet-table{border-collapse:collapse;width:100%;min-width:max-content;}
 .sheet-table th{
   background:#12152a;color:var(--muted);font-size:10px;font-weight:600;
@@ -1512,6 +1512,7 @@ function setSaveStatus(type, msg){
 // INIT APP — API: fetch จาก server | GAS: Sheets + auth | Local: localStorage
 // ============================================================
 async function initApp(){
+  initSheetFooterScrollSync();
   // --- โหมด API Server ---
   if(IS_API){
     showLoadingOverlay(true,'กำลังเชื่อมต่อ...','กำลังตรวจสอบ API Server...');
@@ -2083,6 +2084,56 @@ function renderSheet(plat, rows){
   renderTotalRow(plat, rows);
 }
 
+// ตารางหลักกับตารางแถว TOTAL เป็นคนละ <table> — ต้องคัดลอกความกว้างคอลัมน์จากแถวข้อมูลจริง
+function syncSheetFooterColumnWidths(plat){
+  const main = document.getElementById('sheet-'+plat);
+  const footTable = document.getElementById('sheet-'+plat+'-total');
+  if(!main || !footTable) return;
+  const sampleRow = main.querySelector('tbody tr[data-row]');
+  const footRow = footTable.querySelector('tr.total-row');
+  if(!sampleRow || !footRow) return;
+  const srcCells = sampleRow.querySelectorAll('td');
+  const dstCells = footRow.querySelectorAll('td');
+  if(srcCells.length !== dstCells.length || srcCells.length === 0) return;
+  let sumW = 0;
+  srcCells.forEach((td, i) => {
+    const w = Math.max(1, Math.round(td.getBoundingClientRect().width * 100) / 100);
+    sumW += w;
+    dstCells[i].style.width = w + 'px';
+    dstCells[i].style.minWidth = w + 'px';
+    dstCells[i].style.boxSizing = 'border-box';
+  });
+  footTable.style.tableLayout = 'fixed';
+  footTable.style.width = sumW + 'px';
+}
+
+function scheduleSyncSheetFooterWidths(plat){
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ syncSheetFooterColumnWidths(plat); });
+  });
+}
+
+let _sheetFooterScrollWired = false;
+function initSheetFooterScrollSync(){
+  if(_sheetFooterScrollWired) return;
+  _sheetFooterScrollWired = true;
+  [['tt','page-tt'],['sp','page-sp'],['lz','page-lz']].forEach(function(pair){
+    var plat = pair[0], pageId = pair[1];
+    var page = document.getElementById(pageId);
+    if(!page) return;
+    var inner = page.querySelector('.sheet-scroll-inner');
+    var foot = page.querySelector('.sheet-total-footer');
+    if(!inner || !foot) return;
+    inner.addEventListener('scroll', function(){ foot.scrollLeft = inner.scrollLeft; }, { passive: true });
+    foot.addEventListener('scroll', function(){ inner.scrollLeft = foot.scrollLeft; }, { passive: true });
+  });
+  var resizeT = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeT);
+    resizeT = setTimeout(function(){ ['tt','sp','lz'].forEach(syncSheetFooterColumnWidths); }, 150);
+  });
+}
+
 // แถว TOTAL — รวมค่าทุก column แสดงใต้ตาราง (โซน sheet-total-footer ไม่เลื่อนหาย)
 function renderTotalRow(plat, rows){
   const tbody = document.getElementById('tbody-'+plat);
@@ -2154,6 +2205,7 @@ function renderTotalRow(plat, rows){
   });
 
   target.appendChild(tr);
+  if(footTbody) scheduleSyncSheetFooterWidths(plat);
 }
 
 function renderRow(plat, r={}, idx){
