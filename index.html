@@ -1516,8 +1516,8 @@ async function initApp(){
       loadUserManagement(); // Load admin user panel if admin
       applyTabVisibility(); // Hide tabs based on user permission
       applyEditPermission(); // Disable editing on restricted tabs
-      // Save เมื่อออกจากหน้า (beforeunload) — แทน auto-save ทุก 2 นาที
-      window.addEventListener('beforeunload', saveOnLeave);
+      // Auto-save system
+      initAutoSave();
       window.scrollTo(0, 0); // กลับไปด้านบนสุด
     } catch(e) {
       console.error('initApp API error:', e);
@@ -1638,9 +1638,9 @@ function saveDraft(){
   try {
     ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
     const draftData = { tt: DB.tt, sp: DB.sp, lz: DB.lz, ts: Date.now() };
-    localStorage.setItem('ecom_draft', JSON.stringify(draftData));
+    localStorage.setItem('ecom_db_draft', JSON.stringify(draftData));
     _draftDirty = true;
-    setSaveStatus('draft','💾 Draft บันทึกแล้ว (ยังไม่ save)');
+    setSaveStatus('draft','💾 Draft saved (ยังไม่ sync)');
   } catch(e) {
     console.warn('saveDraft error:', e);
   }
@@ -1699,12 +1699,91 @@ function checkAndRestoreDraft(){
 
 // เตือนเมื่อจะปิดหน้า ถ้ายัง save ไม่สำเร็จ
 function saveOnLeave(e){
-  if(!_draftDirty || !IS_API || !AUTH_TOKEN) return;
-  // Save draft ล่าสุดก่อนปิด
+  if(!IS_API || !AUTH_TOKEN) return;
+  // Save draft ก่อนปิด
   saveDraft();
-  e.preventDefault();
-  e.returnValue = 'มีข้อมูลที่ยังไม่ได้บันทึก — ต้องการออกจริงหรือไม่?';
-  return e.returnValue;
+  // ลอง sync ขึ้น API ด้วย sendBeacon (reliable แม้ปิดหน้า)
+  if(_draftDirty){
+    try {
+      ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
+      const payload = JSON.stringify(DB);
+      const url = API_BASE + '/api/data';
+      if(navigator.sendBeacon){
+        const blob = new Blob([payload], {type:'application/json'});
+        // sendBeacon ไม่รองรับ PUT — ใช้ fetch keepalive แทน
+        fetch(url, {
+          method:'PUT', body:payload, keepalive:true,
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}
+        }).catch(()=>{});
+      } else {
+        fetch(url, {
+          method:'PUT', body:payload, keepalive:true,
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}
+        }).catch(()=>{});
+      }
+    } catch(ex){}
+  }
+  if(_draftDirty){
+    e.preventDefault();
+    e.returnValue = 'มีข้อมูลที่ยังไม่ได้ sync — ต้องการออกจริงหรือไม่?';
+    return e.returnValue;
+  }
+}
+
+// === AUTO-SAVE SYSTEM ===
+var _apiSyncTimer = null;
+var _apiSyncInterval = null;
+
+// Debounced: save draft ทันที + ตั้ง timer sync API หลัง 10 วินาที
+function scheduleAutoSync(){
+  saveDraft(); // save ลง localStorage ทันที
+  if(_apiSyncTimer) clearTimeout(_apiSyncTimer);
+  _apiSyncTimer = setTimeout(async ()=>{
+    _apiSyncTimer = null;
+    await autoSaveAPI();
+    clearDraft();
+  }, 10000); // sync ขึ้น API หลังหยุดแก้ 10 วิ
+}
+
+// Periodic sync ทุก 30 วินาที (ถ้ามี dirty data)
+function startPeriodicSync(){
+  if(_apiSyncInterval) clearInterval(_apiSyncInterval);
+  _apiSyncInterval = setInterval(async ()=>{
+    if(_draftDirty && IS_API && AUTH_TOKEN){
+      await autoSaveAPI();
+      clearDraft();
+    }
+  }, 30000);
+}
+
+// Save เมื่อเปลี่ยน tab (visibilitychange)
+function onVisibilityChange(){
+  if(document.visibilityState === 'hidden' && _draftDirty && IS_API && AUTH_TOKEN){
+    // Tab ถูกซ่อน → sync ทันที
+    saveDraft();
+    autoSaveAPI().then(()=> clearDraft()).catch(()=>{});
+  }
+}
+
+// เมื่อ net กลับมา → auto-sync draft ค้าง
+function onOnline(){
+  if(_draftDirty && IS_API && AUTH_TOKEN){
+    showToast('🌐 เชื่อมต่อกลับแล้ว — กำลัง sync...');
+    autoSaveAPI().then(()=>{
+      clearDraft();
+      showToast('✅ sync สำเร็จ!');
+    }).catch(()=>{
+      showToast('⚠️ sync ไม่สำเร็จ จะลองอีกครั้ง');
+    });
+  }
+}
+
+// เริ่ม auto-save listeners (เรียกหลัง initApp)
+function initAutoSave(){
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('online', onOnline);
+  window.addEventListener('beforeunload', saveOnLeave);
+  startPeriodicSync();
 }
 
 function autoSaveGAS(){
@@ -2080,7 +2159,7 @@ function renderRow(plat, r={}, idx){
       const inp = document.createElement('input');
       inp.type='text'; inp.inputMode='numeric'; inp.className='cell'; inp.dataset.field=f.k;
       inp.value = fmtComma(r[f.k]||''); inp.placeholder='0';
-      inp.addEventListener('input', ()=>{ liveCommaFmt(inp); recalcRow(tr, plat); updateTotalRowFromDOM(plat); });
+      inp.addEventListener('input', ()=>{ liveCommaFmt(inp); recalcRow(tr, plat); updateTotalRowFromDOM(plat); scheduleAutoSync(); });
       // Audit: จับค่าเก่าตอน focus และบันทึก log ตอน blur
       inp.addEventListener('focus', ()=>{ inp.dataset.oldval = stripComma(inp.value); });
       inp.addEventListener('blur', ()=>{
@@ -4156,7 +4235,8 @@ function renderAPMSummary(tasks){
     const blocked=et.filter(t=>t.status==='blocked').length;
     const pct=total>0?Math.round(done/total*100):0;
     const color=EMP_COLORS[i%EMP_COLORS.length];
-    return `<div class="apm-emp-card">
+    const selected = _apmSelectedEmp === emp.name;
+    return `<div class="apm-emp-card${selected?' apm-card-selected':''}" data-emp="${emp.name}" onclick="onClickAPMCard('${emp.name.replace(/'/g,"\\'")}')" style="cursor:pointer;${selected?'border:2px solid '+color+';box-shadow:0 0 12px '+color+'40;transform:scale(1.03);':'border:2px solid transparent;'}">
       <div class="apm-emp-name">
         <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block;"></span>
         ${emp.name}
@@ -4171,6 +4251,24 @@ function renderAPMSummary(tasks){
       <div class="apm-pct"><span>ความคืบหน้า</span><span style="color:${color};font-weight:700">${pct}%</span></div>
     </div>`;
   }).join('');
+}
+
+// Track selected employee from card click
+var _apmSelectedEmp = null;
+
+function onClickAPMCard(empName){
+  // Toggle: คลิกซ้ำ → reset เป็น "ทุกคน"
+  if(_apmSelectedEmp === empName){
+    _apmSelectedEmp = null;
+  } else {
+    _apmSelectedEmp = empName;
+  }
+  // Sync dropdown filter (ถ้ามี)
+  const empFilter = document.getElementById('apmFilterEmp');
+  if(empFilter){
+    empFilter.value = _apmSelectedEmp || 'all';
+  }
+  renderAPM();
 }
 
 function renderAPM(){

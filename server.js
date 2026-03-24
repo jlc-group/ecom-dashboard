@@ -732,8 +732,34 @@ app.put('/api/data', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // --- Platform data FIRST ---
+    // === PROTECTION: ตรวจสอบก่อน save ===
     for (const plat of ['tt', 'sp', 'lz']) {
+      if (!Array.isArray(db[plat]) || db[plat].length === 0) continue;
+      // เช็คว่ามีข้อมูลจริงมั้ย (อย่างน้อย 1 row ที่ gmv > 0)
+      var hasRealData = db[plat].some(function(r){ return parseFloat(r.gmv||0) > 0; });
+      // ดึงข้อมูลปัจจุบันใน DB
+      var existRes = await client.query('SELECT COUNT(*) as cnt, SUM(CASE WHEN gmv::numeric > 0 THEN 1 ELSE 0 END) as with_data FROM ' + TABLE_MAP[plat]);
+      var existData = parseInt(existRes.rows[0].with_data||0);
+      // ⚠️ ถ้า DB มีข้อมูลจริง แต่ client ส่งมาเป็น 0 ทั้งหมด → ปฏิเสธ save platform นี้
+      if(existData > 0 && !hasRealData){
+        console.warn('[SAVE BLOCKED] ' + plat + ': DB has ' + existData + ' rows with data, but client sent ALL ZEROS — skipping to prevent data loss!');
+        delete db[plat]; // ลบออกเพื่อไม่ให้ถูก save
+      }
+    }
+
+    // --- Backup ก่อน DELETE ---
+    for (const plat of ['tt', 'sp', 'lz']) {
+      if (!Array.isArray(db[plat])) continue;
+      const table = TABLE_MAP[plat];
+      const bkTable = table + '_backup';
+      await client.query('CREATE TABLE IF NOT EXISTS ' + bkTable + ' (LIKE ' + table + ' INCLUDING ALL)').catch(function(){});
+      await client.query('DELETE FROM ' + bkTable).catch(function(){});
+      await client.query('INSERT INTO ' + bkTable + ' SELECT * FROM ' + table).catch(function(){});
+    }
+
+    // --- Platform data DELETE + re-insert ---
+    for (const plat of ['tt', 'sp', 'lz']) {
+      if (!Array.isArray(db[plat])) continue; // Skip ถ้าถูก block
       const table = TABLE_MAP[plat];
       await client.query('DELETE FROM ' + table);
     }
