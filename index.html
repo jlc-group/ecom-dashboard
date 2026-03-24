@@ -26,7 +26,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 select,button{font-family:inherit;}
 select{background:var(--surface2);color:var(--text);}
 select option{background:var(--surface2);color:var(--text);}
-.sel{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;outline:none;}
+.sel{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;outline:none;max-height:300px;}
 .btn{border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600;}
 .btn-primary{background:var(--accent);color:#fff;}
 .btn-success{background:var(--green);color:#000;}
@@ -1898,10 +1898,8 @@ function updateBrandDropdowns(){
   
   if(cur && cur !== 'all') {
     sel.value = cur;
-  } else if (BRANDS && BRANDS.length > 0) {
-    // ให้ selBrand เลือกแบรนด์แรกอัตโนมัติ เพื่อให้เริ่มกรอกข้อมูลได้เลย (ไม่ค้างที่ "ทุกแบรนด์")
-    sel.value = BRANDS[0];
   }
+  // ตั้งค่าเริ่มต้นเป็น "ทุกแบรนด์" เสมอ (ไม่ auto-select แบรนด์แรก)
 
   // อัพเดต badge และ user dropdown
   if(document.getElementById('tt-brand-badge')) updateBrandLabels();
