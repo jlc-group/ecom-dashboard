@@ -2117,6 +2117,72 @@ process.on('unhandledRejection', (err) => {
   } catch(e){ console.warn('employees can_view migration:', e.message); }
 })();
 
+// Auto-migrate: fix apm_tasks with old employee names (Google names → Thai names)
+(async function(){
+  try {
+    // หาชื่อใน apm_tasks ที่ไม่ตรงกับ employees ปัจจุบัน
+    var orphaned = await pool.query(`
+      SELECT DISTINCT a.employee 
+      FROM apm_tasks a
+      LEFT JOIN employees e ON e.name = a.employee AND e.status = 'approved'
+      WHERE a.employee IS NOT NULL AND a.employee != '' AND e.id IS NULL
+    `);
+    if(orphaned.rows.length === 0) return;
+    console.log('[MIGRATE] Found orphaned apm_tasks employees:', orphaned.rows.map(function(r){return r.employee;}));
+    // ดึง employees ปัจจุบัน
+    var emps = await pool.query("SELECT id, name, email, google_id FROM employees WHERE status = 'approved'");
+    // สร้าง lookup จาก Google name → current name
+    // ลองจับคู่ด้วย email prefix, ชื่อ partial match
+    for(var o of orphaned.rows){
+      var oldName = o.employee;
+      // ลอง match ด้วย first name หรือ email prefix
+      var matched = emps.rows.find(function(e){
+        var emailFull = (e.email||'').split('@')[0].toLowerCase();
+        var emailFirst = emailFull.split('.')[0]; // "pattra" จาก "pattra.jlcgroup"
+        var oldLower = oldName.toLowerCase();
+        var oldNoSpace = oldLower.replace(/\s+/g,'');
+        return emailFull === oldLower || emailFirst === oldLower ||
+               oldLower.includes(emailFirst) || emailFirst.includes(oldLower) ||
+               oldNoSpace.includes(emailFirst) || emailFirst.includes(oldNoSpace) ||
+               // partial: old name starts with email prefix
+               oldLower.startsWith(emailFirst) || oldNoSpace.startsWith(emailFirst);
+      });
+      if(!matched){
+        // ลอง fuzzy match: first word ของ old name vs first word ของ current name
+        var oldFirst = oldName.split(/\s+/)[0].toLowerCase();
+        matched = emps.rows.find(function(e){
+          var curFirst = (e.name||'').split(/\s+/)[0].toLowerCase();
+          return curFirst === oldFirst;
+        });
+      }
+      if(!matched){
+        // Hardcoded fallback: Google English → Thai names (สำหรับชื่อที่ auto-match ไม่ได้)
+        var knownMap = {
+          'bewty':'บิวตี้','anuttara pumpakdee':'หมิว','pattranit pornlaksanacharoen':'มุก',
+          'ekgapat bumrerjit':'ส้มจุก','jirachot':'อั๋น','jirachot pornpandejwittaya':'อั๋น',
+          'aa ar':'ผักกาด','ladapa kaewpech':'ทรายๆ','wittaya':'พี่เบียร์'
+        };
+        var mappedName = knownMap[oldName.toLowerCase()];
+        if(mappedName){
+          matched = emps.rows.find(function(e){ return e.name === mappedName; });
+        }
+      }
+      if(matched){
+        await pool.query('UPDATE apm_tasks SET employee = $1 WHERE employee = $2', [matched.name, oldName]);
+        // อัพเดต can_view ด้วย
+        var allEmps = await pool.query("SELECT id, can_view FROM employees WHERE can_view LIKE '%' || $1 || '%'", [oldName]);
+        for(var ae of allEmps.rows){
+          var cv = (ae.can_view||'').split(',').map(function(n){ return n===oldName?matched.name:n; }).join(',');
+          await pool.query('UPDATE employees SET can_view=$1 WHERE id=$2', [cv, ae.id]);
+        }
+        console.log('[MIGRATE] apm_tasks employee:', oldName, '→', matched.name);
+      } else {
+        console.warn('[MIGRATE] Could not auto-match:', oldName, '— admin must fix manually');
+      }
+    }
+  } catch(e){ console.warn('apm_tasks employee migration:', e.message); }
+})();
+
 app.listen(PORT, function() {
   console.log('ECOM Dashboard API running on port ' + PORT + ' | version: ' + SERVER_VERSION + ' | AUTO_APPROVE=' + AUTO_APPROVE_USERS);
 

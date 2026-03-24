@@ -1163,6 +1163,7 @@ async function handleGoogleSignIn(response){
     sessionStorage.setItem('ecom_token', data.token);
     CURRENT_USER = data.user.name || data.user.email;
     sessionStorage.setItem('ecom_user', CURRENT_USER);
+    if(data.user.email) sessionStorage.setItem('ecom_user_email', data.user.email);
     // เก็บ visibleTabs/editableTabs จาก auth response (fresh จาก DB)
     CURRENT_USER_VISIBLE_TABS = (data.user.visibleTabs !== undefined && data.user.visibleTabs !== null) ? data.user.visibleTabs : null;
     CURRENT_USER_EDITABLE_TABS = (data.user.editableTabs !== undefined && data.user.editableTabs !== null) ? data.user.editableTabs : null;
@@ -1215,6 +1216,7 @@ async function checkExistingSession(){
     }
     CURRENT_USER = data.user.name || data.user.email;
     sessionStorage.setItem('ecom_user', CURRENT_USER);
+    if(data.user.email) sessionStorage.setItem('ecom_user_email', data.user.email);
     // เก็บ visibleTabs/editableTabs จาก /api/auth/me (fresh จาก DB)
     CURRENT_USER_VISIBLE_TABS = (data.user.visibleTabs !== undefined && data.user.visibleTabs !== null) ? data.user.visibleTabs : null;
     CURRENT_USER_EDITABLE_TABS = (data.user.editableTabs !== undefined && data.user.editableTabs !== null) ? data.user.editableTabs : null;
@@ -1967,6 +1969,72 @@ function renderSheet(plat, rows){
   const tbody = document.getElementById('tbody-'+plat);
   tbody.innerHTML = '';
   (rows||[]).forEach((r,i) => renderRow(plat, r, i));
+  renderTotalRow(plat, rows);
+}
+
+// แถว TOTAL — รวมค่าทุก column ใต้แถวสุดท้าย
+function renderTotalRow(plat, rows){
+  const tbody = document.getElementById('tbody-'+plat);
+  if(!tbody) return;
+  // ลบ total row เก่า (ถ้ามี)
+  const old = tbody.querySelector('tr.total-row');
+  if(old) old.remove();
+  if(!rows || rows.length === 0) return;
+
+  const fields = PLAT_FIELDS[plat];
+  // คำนวณ calcRow ให้ทุกแถว แล้วรวม
+  const calcedRows = rows.map(r => calcRow(plat, r));
+  const totals = {};
+  fields.forEach(f => {
+    if(f.t==='date' || f.t==='brand') return;
+    totals[f.k] = calcedRows.reduce((sum, c) => sum + (parseFloat(c[f.k])||0), 0);
+  });
+  // คำนวณ NM%, ROAS จาก totals (ไม่ใช่รวมจากแต่ละแถว)
+  if(totals.gmv !== undefined && totals.totalExp !== undefined){
+    totals.nm = totals.gmv - totals.totalExp;
+    totals.nmPct = totals.gmv > 0 ? totals.nm / totals.gmv * 100 : 0;
+  }
+  // ROAS = GMV / ads total
+  const adsKeys = {
+    tt: ['costGmvAds','costGmvLive'],
+    sp: ['spAds','fbCpas','affiliate','searchAds','shopAds','productAds'],
+    lz: ['lzsd','lzGmvMax','affLz']
+  };
+  const adsTotal = (adsKeys[plat]||[]).reduce((s, k) => s + (totals[k]||0), 0);
+  totals.roas = adsTotal > 0 ? totals.gmv / adsTotal : 0;
+
+  const tr = document.createElement('tr');
+  tr.className = 'total-row';
+  tr.style.cssText = 'background:var(--surface2);border-top:2px solid var(--accent);font-weight:700;position:sticky;bottom:0;z-index:2;';
+
+  // Row number cell
+  const tdN = document.createElement('td');
+  tdN.style.cssText = 'padding:4px 6px;color:var(--accent);font-weight:800;font-size:11px;';
+  tdN.textContent = 'TOTAL';
+  tr.appendChild(tdN);
+
+  fields.forEach(f => {
+    const td = document.createElement('td');
+    if(f.t === 'date'){
+      td.textContent = '';
+      td.style.cssText = 'padding:4px 6px;';
+    } else if(f.t === 'brand'){
+      td.style.display = 'none';
+    } else if(f.t === 'cp'){
+      td.textContent = (totals[f.k]||0).toFixed(1) + '%';
+      td.style.cssText = 'padding:4px 6px;text-align:right;color:var(--green);font-size:12px;';
+    } else if(f.t === 'cx'){
+      td.textContent = (totals[f.k]||0).toFixed(1) + 'x';
+      td.style.cssText = 'padding:4px 6px;text-align:right;color:var(--accent);font-size:12px;';
+    } else {
+      const val = totals[f.k]||0;
+      td.textContent = fmt(val);
+      td.style.cssText = 'padding:4px 6px;text-align:right;font-size:12px;' + (val < 0 ? 'color:#ff6b6b;' : 'color:var(--green);');
+    }
+    tr.appendChild(td);
+  });
+
+  tbody.appendChild(tr);
 }
 
 function renderRow(plat, r={}, idx){
@@ -2006,7 +2074,7 @@ function renderRow(plat, r={}, idx){
       const inp = document.createElement('input');
       inp.type='text'; inp.inputMode='numeric'; inp.className='cell'; inp.dataset.field=f.k;
       inp.value = fmtComma(r[f.k]||''); inp.placeholder='0';
-      inp.addEventListener('input', ()=>{ liveCommaFmt(inp); recalcRow(tr, plat); });
+      inp.addEventListener('input', ()=>{ liveCommaFmt(inp); recalcRow(tr, plat); updateTotalRowFromDOM(plat); });
       // Audit: จับค่าเก่าตอน focus และบันทึก log ตอน blur
       inp.addEventListener('focus', ()=>{ inp.dataset.oldval = stripComma(inp.value); });
       inp.addEventListener('blur', ()=>{
@@ -2075,6 +2143,11 @@ function recalcRow(tr, plat){
       el.value = val.toFixed(1)+'x';
     }
   });
+}
+
+function updateTotalRowFromDOM(plat){
+  const rows = getTableRows(plat);
+  renderTotalRow(plat, rows);
 }
 
 function recalcAll(){
@@ -3953,12 +4026,24 @@ function getEmployees(){
 function getMyEmployee(){
   if(!CURRENT_USER) return null;
   const emps = DB.employees||[];
-  // ตรงชื่อ (local mode)
+  // ตรงชื่อ
   let found = emps.find(e=>e.name && e.name===CURRENT_USER);
   if(found) return found;
-  // ตรง email (GAS mode)
+  // ตรง email (ใช้ CURRENT_USER เป็น email)
   found = emps.find(e=>e.email && e.email.toLowerCase()===CURRENT_USER.toLowerCase());
-  return found||null;
+  if(found) return found;
+  // fallback: ใช้ email จาก sessionStorage (กรณีชื่อเปลี่ยนแต่ session ยังเก่า)
+  const savedEmail = sessionStorage.getItem('ecom_user_email');
+  if(savedEmail){
+    found = emps.find(e=>e.email && e.email.toLowerCase()===savedEmail.toLowerCase());
+    if(found){
+      // resync CURRENT_USER ให้ตรงกับชื่อปัจจุบัน
+      CURRENT_USER = found.name;
+      sessionStorage.setItem('ecom_user', found.name);
+      return found;
+    }
+  }
+  return null;
 }
 
 // เช็คว่า user ปัจจุบันเป็น Admin หรือเปล่า
