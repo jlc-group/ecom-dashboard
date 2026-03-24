@@ -1880,7 +1880,10 @@ function updateBrandDropdowns(){
   const sel = document.getElementById('selBrand');
   const cur = sel.value;
   sel.innerHTML = '<option value="all">ทุกแบรนด์</option>';
-  BRANDS.forEach(b => {
+  const brandOrder = ['JH-ECOM','J-DENT','JARVIT','JNIS','BEAUTERRY'];
+  const sorted = brandOrder.filter(b => BRANDS.find(x => x.toUpperCase()===b)).map(b => BRANDS.find(x => x.toUpperCase()===b));
+  BRANDS.forEach(b => { if(!sorted.find(s => s.toUpperCase()===b.toUpperCase())) sorted.push(b); });
+  sorted.forEach(b => {
     const o = document.createElement('option');
     o.value=b; o.text=b;
     sel.appendChild(o);
