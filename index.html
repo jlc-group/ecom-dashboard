@@ -3773,7 +3773,12 @@ function renderEmpConfig(){
       <td style="text-align:center;">
         <button class="btn btn-ghost btn-sm" onclick="openViewPerm(${i})" title="กำหนดว่าคนนี้เห็นงานใครได้บ้าง" style="font-size:11px;">🔑 กำหนด</button>
       </td>
-      <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+      <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove();debouncedEmpSave()">✕</button></td>`;
+    // Auto-save เมื่อแก้ไข input ใดๆ
+    tr.querySelectorAll('input[type="text"],input[type="checkbox"]').forEach(inp => {
+      inp.addEventListener('input', debouncedEmpSave);
+      inp.addEventListener('change', debouncedEmpSave);
+    });
     tbody.appendChild(tr);
   });
 }
