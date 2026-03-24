@@ -912,7 +912,7 @@ app.put('/api/employees', requireAuth, async (req, res) => {
     // UPSERT: update existing by email, insert new ones — preserve google_id, status, picture
     var employees = req.body.employees || [];
     // Get existing employees to preserve auth fields
-    var existing = await client.query('SELECT id, email, google_id, status, picture, visible_tabs, editable_tabs FROM employees');
+    var existing = await client.query('SELECT id, name, email, google_id, status, picture, visible_tabs, editable_tabs FROM employees');
     var existingMap = {};
     existing.rows.forEach(function(r){ if(r.email) existingMap[r.email.toLowerCase()] = r; });
 
@@ -931,10 +931,23 @@ app.put('/api/employees', requireAuth, async (req, res) => {
       if(ex){
         // Update existing — keep google_id, status, picture
         var cvStr = Array.isArray(e.canView) ? e.canView.join(',') : (e.canView||'');
+        var oldName = ex.name || '';
+        var newName = e.name || '';
         await client.query(
           'UPDATE employees SET name=$1, brands=$2, note=$3, is_admin=$4, can_view=$5 WHERE id=$6',
-          [e.name||'', e.brands||'', e.note||'', e.isAdmin||false, cvStr, ex.id]
+          [newName, e.brands||'', e.note||'', e.isAdmin||false, cvStr, ex.id]
         );
+        // Cascade: ถ้าชื่อเปลี่ยน → อัพเดต apm_tasks + can_view ของคนอื่น
+        if(oldName && newName && oldName !== newName){
+          await client.query('UPDATE apm_tasks SET employee=$1 WHERE employee=$2', [newName, oldName]);
+          // อัพเดต can_view ของพนักงานคนอื่นที่อ้างชื่อเก่า
+          var allEmps = await client.query("SELECT id, can_view FROM employees WHERE can_view LIKE '%' || $1 || '%'", [oldName]);
+          for(var ae of allEmps.rows){
+            var cv = (ae.can_view||'').split(',').map(function(n){ return n===oldName?newName:n; }).join(',');
+            await client.query('UPDATE employees SET can_view=$1 WHERE id=$2', [cv, ae.id]);
+          }
+          console.log('[EMP] Name cascade:', oldName, '→', newName);
+        }
       } else {
         // Insert new — status=pending (ต้องอนุมัติแยกต่างหาก)
         var cvStr2 = Array.isArray(e.canView) ? e.canView.join(',') : (e.canView||'');
