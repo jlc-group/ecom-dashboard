@@ -763,7 +763,16 @@ app.put('/api/data', requireAuth, async (req, res) => {
     if (db.reminderItem2Title !== undefined) reminderTpl.item2Title = db.reminderItem2Title;
     if (db.reminderItem2Desc !== undefined) reminderTpl.item2Desc = db.reminderItem2Desc;
     if (db.reminderThankMsg !== undefined) reminderTpl.thankMsg = db.reminderThankMsg;
-    if (Object.keys(reminderTpl).length > 0) await pool.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(reminderTpl)]);
+    if (Object.keys(reminderTpl).length > 0) {
+      // Merge กับ existing template (เหมือน POST /api/config/save)
+      var existing = {};
+      try {
+        var { rows: rtRows } = await pool.query("SELECT value FROM config WHERE key = 'reminder_template'");
+        if (rtRows.length > 0) existing = JSON.parse(rtRows[0].value || '{}');
+      } catch(e){}
+      Object.assign(existing, reminderTpl);
+      await pool.query("INSERT INTO config (key, value) VALUES ('reminder_template', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [JSON.stringify(existing)]);
+    }
   } catch(eCfg) {
     console.error('[SAVE] config save error:', eCfg.message);
   }
@@ -1169,42 +1178,15 @@ app.put('/api/apm', requireAuth, async (req, res) => {
 });
 
 // ============================================================
-// Daily data aliases — frontend เรียก /api/daily/:plat + /api/daily/:plat/bulk
+// Daily data aliases — frontend เรียก /api/daily/:plat (GET only)
+// PUT /api/daily/:plat/bulk ถูก register แล้วที่ parameterized route ด้านบน
 // ============================================================
 ['tt', 'sp', 'lz'].forEach(function(plat) {
   var table = TABLE_MAP[plat];
-  var cols  = PLAT_COLS[plat];
-  var ph    = makePH(cols.length);
 
   app.get('/api/daily/' + plat, requireAuth, async function(req, res) {
     const { rows } = await pool.query('SELECT * FROM ' + table + ' ORDER BY date DESC, brand');
     res.json(rows.map(rowToCamel));
-  });
-
-  app.put('/api/daily/' + plat + '/bulk', requireAuth, async function(req, res) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const rows = req.body.rows || req.body;
-      const dataRows = Array.isArray(rows) ? rows : [];
-      const brands = [...new Set(dataRows.map(function(r) { return r.brand; }).filter(Boolean))];
-      for (const brand of brands) {
-        await client.query('DELETE FROM ' + table + ' WHERE brand = $1', [brand]);
-      }
-      for (const row of dataRows) {
-        const snake = rowToSnake(row);
-        const vals  = cols.map(function(c) { return cleanVal(c, snake[c]); });
-        await client.query('INSERT INTO ' + table + ' (' + cols.join(',') + ') VALUES (' + ph + ')', vals);
-      }
-      await client.query('COMMIT');
-      res.json({ success: true, count: dataRows.length });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      console.error('PUT /api/daily/' + plat + '/bulk error:', err);
-      res.status(500).json({ error: err.message });
-    } finally {
-      client.release();
-    }
   });
 });
 

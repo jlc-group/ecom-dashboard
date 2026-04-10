@@ -1407,10 +1407,12 @@ async function loadDB(){
       const data = await resp.json();
       if(data && typeof data === 'object'){
         DB = data;
+        _loadedFromServer = true;
       }
     } catch(e) {
       console.error('loadDB API error:', e, 'status:', e.message);
       showToast('⚠️ โหลดจาก API ไม่ได้: ' + (e.message||e) + ' — ใช้ข้อมูล local แทน');
+      _loadedFromServer = false;
       // Fallback to localStorage
       try {
         const saved = localStorage.getItem('ecom_db');
@@ -1617,46 +1619,54 @@ async function initApp(){
 async function autoSaveAPI(){
   if(!IS_API) return;
   if(!_draftDirty) return; // 🛡️ Smart Auto-save: ถ้าไม่มีการแก้ข้อมูลในหน้านี้ จะไม่ส่ง API ไปทับ DB เด็ดขาด
-  
-  // Sync sheet data from DOM
-  ['tt','sp','lz'].forEach(plat=>{
-    const tbody=document.getElementById('tbody-'+plat);
-    if(tbody&&tbody.querySelector('tr[data-row]')) DB[plat]=getTableRows(plat);
-  });
-  // Sync employee data from DOM (ถ้ามีตาราง empConfig อยู่)
-  const empTbody = document.getElementById('empConfigTable');
-  if(empTbody && empTbody.children.length > 0){
-    const rows = empTbody.querySelectorAll('tr');
-    // สร้าง map จาก email → canView เพื่อ match ที่ถูกต้อง (ไม่ใช้ index)
-    const oldCanViewMap = {};
-    (DB.employees||[]).forEach(e=>{
-      if(e.email) oldCanViewMap[e.email.toLowerCase()] = e.canView || [];
-    });
-    const emps = [];
-    rows.forEach((tr)=>{
-      const name = tr.querySelector('[data-field="name"]')?.value?.trim();
-      const email = tr.querySelector('[data-field="email"]')?.value?.trim();
-      const brands = tr.querySelector('[data-field="brands"]')?.value?.trim();
-      const note = tr.querySelector('[data-field="note"]')?.value?.trim();
-      const isAdmin = tr.querySelector('[data-field="isAdmin"]')?.checked || false;
-      const canView = email ? (oldCanViewMap[email.toLowerCase()] || []) : [];
-      if(name) emps.push({name, email, brands, note, isAdmin, canView});
-    });
-    if(emps.length > 0) DB.employees = emps;
-  }
+  if(!_loadedFromServer) return; // 🛡️ ถ้าโหลดจาก server ไม่สำเร็จ ไม่ sync ขึ้น server (ป้องกัน stale data ทับ)
+  if(_isSaving) return; // 🛡️ ป้องกัน concurrent save
+  _isSaving = true;
+
+  // Sync sheet data from DOM (เฉพาะ daily data เท่านั้น)
+  ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
+
   try {
-    const resp = await apiFetch(API_BASE + '/api/data', {
-      method: 'PUT',
-      body: JSON.stringify(DB)
-    });
-    if(resp.ok) {
-      setSaveStatus('ok','✅ Auto-saved');
-      _draftDirty = false; // รีเซ็ตสถานะ draft หลังจาก save เสร็จ
+    for(const plat of ['tt','sp','lz']){
+      const allRows = DB[plat] || [];
+      if(allRows.length === 0) continue;
+
+      const brandsToSave = [...new Set(allRows.map(r => r.brand).filter(Boolean))];
+      for(const b of brandsToSave){
+        const brandRows = allRows.filter(r => r.brand === b);
+        if(brandRows.length === 0) continue;
+
+        // สลายร่างข้อมูลแฝด (dedup by date)
+        const mergedMap = {};
+        for(const r of brandRows){
+          const d = String(r.date||r.Date||'').substring(0,10);
+          if(!d) continue;
+          if(!mergedMap[d]){
+            mergedMap[d] = { ...r };
+          } else {
+            for(const k in r){
+              if(r[k] && !isNaN(parseFloat(r[k])) && parseFloat(r[k]) > 0){
+                mergedMap[d][k] = r[k];
+              }
+            }
+          }
+        }
+        const uniqueRows = Object.values(mergedMap);
+
+        const resp = await apiFetch(API_BASE + '/api/daily/' + plat + '/bulk', {
+          method: 'PUT',
+          body: JSON.stringify({ rows: uniqueRows })
+        });
+        if(!resp.ok) throw new Error(plat + '/' + b + ': HTTP ' + resp.status);
+      }
     }
-    else throw new Error('HTTP ' + resp.status);
+    setSaveStatus('ok','✅ Auto-saved');
+    _draftDirty = false;
   } catch(e) {
     console.warn('autoSaveAPI failed:', e);
     setSaveStatus('err','⚠️ Auto-save ล้มเหลว');
+  } finally {
+    _isSaving = false;
   }
 }
 
@@ -1665,6 +1675,8 @@ async function autoSaveAPI(){
 // save ลง localStorage ทุกครั้งที่แก้ข้อมูล (ไม่ hit server)
 // ============================================================
 var _draftDirty = false;
+var _loadedFromServer = false; // true เมื่อ loadDB() จาก API สำเร็จ — ป้องกัน stale data sync
+var _isSaving = false; // concurrency guard — ป้องกัน auto-save ซ้อนกัน
 
 // Save draft ลง localStorage (เรียกตอนแก้ข้อมูลตาราง)
 function saveDraft(){
@@ -1682,7 +1694,7 @@ function saveDraft(){
 
 // ลบ draft หลัง save สำเร็จ
 function clearDraft(){
-  localStorage.removeItem('ecom_draft');
+  localStorage.removeItem('ecom_db_draft');
   _draftDirty = false;
 }
 
@@ -1738,29 +1750,8 @@ function checkAndRestoreDraft(){
 // เตือนเมื่อจะปิดหน้า ถ้ายัง save ไม่สำเร็จ
 function saveOnLeave(e){
   if(!IS_API || !AUTH_TOKEN) return;
-  // Save draft ก่อนปิด
+  // Save draft ลง localStorage ก่อนปิด (จะ sync กลับตอนเปิดหน้าใหม่ผ่าน auto-save)
   saveDraft();
-  // ลอง sync ขึ้น API ด้วย sendBeacon (reliable แม้ปิดหน้า)
-  if(_draftDirty){
-    try {
-      ['tt','sp','lz'].forEach(plat => syncTableToDB(plat));
-      const payload = JSON.stringify(DB);
-      const url = API_BASE + '/api/data';
-      if(navigator.sendBeacon){
-        const blob = new Blob([payload], {type:'application/json'});
-        // sendBeacon ไม่รองรับ PUT — ใช้ fetch keepalive แทน
-        fetch(url, {
-          method:'PUT', body:payload, keepalive:true,
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}
-        }).catch(()=>{});
-      } else {
-        fetch(url, {
-          method:'PUT', body:payload, keepalive:true,
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH_TOKEN}
-        }).catch(()=>{});
-      }
-    } catch(ex){}
-  }
   if(_draftDirty){
     e.preventDefault();
     e.returnValue = 'มีข้อมูลที่ยังไม่ได้ sync — ต้องการออกจริงหรือไม่?';
@@ -1863,6 +1854,8 @@ async function saveAll(){
   } else if(IS_API){
     // === FIX: save ทีละ platform ทีละ brand ผ่าน endpoint ใหม่ ===
     // ไม่ DELETE ข้อมูลทั้ง table แล้ว — save เฉพาะ brand ที่เลือก
+    if(_isSaving){ showToast('⏳ กำลังบันทึกอยู่...'); return; }
+    _isSaving = true;
     setSaveStatus('saving','⏳ กำลังบันทึก...');
     try {
       let totalSaved = 0;
@@ -1920,6 +1913,8 @@ async function saveAll(){
       showToast('❌ บันทึกไม่สำเร็จ: ' + e.message);
       // Fallback: save to localStorage
       localStorage.setItem('ecom_db', JSON.stringify(DB));
+    } finally {
+      _isSaving = false;
     }
   } else {
     saveDB();
@@ -2723,7 +2718,21 @@ async function saveFcPlatConfig(){
   if(new Set(keys).size!==keys.length){ showToast('⚠️ รหัสช่องทางซ้ำกัน!'); return; }
   DB.forecastPlatforms = platforms;
   FC_PLAT = platforms;
-  await saveDB();
+  if(IS_API){
+    try {
+      const resp = await apiFetch(API_BASE + '/api/config/forecast_platforms', {
+        method: 'PUT',
+        body: JSON.stringify({ value: JSON.stringify(platforms) })
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    } catch(e) {
+      console.error('saveFcPlatConfig error:', e);
+      showToast('❌ บันทึกไม่ได้: ' + e.message);
+      return;
+    }
+  } else {
+    await saveDB();
+  }
   showToast('✅ บันทึกช่องทาง Forecast แล้ว!');
   renderBrandPlatMap();
   renderForecast();
@@ -2775,7 +2784,21 @@ async function saveBrandPlatMap(){
     if(selected.length>0) map[b] = selected;
   });
   DB.brandPlatMap = map;
-  await saveDB();
+  if(IS_API){
+    try {
+      const resp = await apiFetch(API_BASE + '/api/config/brand_plat_map', {
+        method: 'PUT',
+        body: JSON.stringify({ value: JSON.stringify(map) })
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    } catch(e) {
+      console.error('saveBrandPlatMap error:', e);
+      showToast('❌ บันทึกไม่ได้: ' + e.message);
+      return;
+    }
+  } else {
+    await saveDB();
+  }
   showToast('✅ บันทึกแบรนด์×ช่องทาง แล้ว!');
   renderForecast();
 }
@@ -3954,7 +3977,21 @@ function renderForecastCharts(){
 }
 
 async function saveForecast(){
-  await saveDB();
+  if(IS_API){
+    try {
+      const resp = await apiFetch(API_BASE + '/api/forecast', {
+        method: 'PUT',
+        body: JSON.stringify({ forecastGMV: DB.forecastGMV })
+      });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    } catch(e) {
+      console.error('saveForecast error:', e);
+      showToast('❌ บันทึกไม่ได้: ' + e.message);
+      return;
+    }
+  } else {
+    await saveDB();
+  }
   showToast('✅ บันทึกเป้าหมายแล้ว!');
 }
 
