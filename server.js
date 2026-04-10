@@ -1263,6 +1263,16 @@ app.delete('/api/audit', requireAuth, async (req, res) => {
 // ============================================================
 // APM Tasks CRUD
 // ============================================================
+// Alias: frontend React build เรียก /api/tasks → forward ไป /api/apm-tasks
+app.get('/api/tasks', requireAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM apm_tasks ORDER BY id DESC');
+  res.json(rows.map(rowToCamel));
+});
+app.put('/api/tasks', requireAuth, async (req, res, next) => {
+  req.url = '/api/apm-tasks';
+  next();
+});
+
 app.get('/api/apm-tasks', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM apm_tasks ORDER BY id DESC');
   res.json(rows.map(rowToCamel));
